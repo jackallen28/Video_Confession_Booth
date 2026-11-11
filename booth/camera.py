@@ -36,6 +36,7 @@ class Camera:
         self._frame = None          # latest preview frame (bytes, RGB)
         self._frame_seq = 0
         self._last_jpeg = 0.0
+        self.latest_jpeg = None     # newest camera frame as sent (for the web page)
         self._sinks = []            # callables getting every JPEG frame
         self._stop = threading.Event()
         self._fails = 0
@@ -56,7 +57,7 @@ class Camera:
     @property
     def ok(self):
         return self._proc is not None and self._proc.poll() is None and \
-            time.monotonic() - self._last_jpeg < 3.0
+            self.latest_jpeg is not None and time.monotonic() - self._last_jpeg < 3.0
 
     def add_sink(self, fn):
         with self._lock:
@@ -162,6 +163,7 @@ class Camera:
             if len(data) < length:
                 return
             self._last_jpeg = time.monotonic()
+            self.latest_jpeg = data
             for sink in self._sinks:
                 try:
                     sink(data)
@@ -186,6 +188,10 @@ class Camera:
                     self._frame_seq += 1
         finally:
             f.close()
+
+    def restart(self):
+        """Restart ffmpeg (e.g. mirror setting changed); the supervisor brings it back."""
+        self._kill()
 
     def _kill(self):
         p = self._proc

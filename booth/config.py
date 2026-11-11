@@ -1,8 +1,8 @@
 """Settings. Every value can be overridden in /etc/confession-booth/config.toml
 (see config.example.toml), or in the file given with --config.
 
-Camera settings made over SSH with `sudo booth-camera` are saved separately in
-/etc/confession-booth/camera.json and override the same keys here."""
+Settings changed on the web page (or with `sudo booth-camera`) are saved in
+/etc/confession-booth/settings.json and override the same keys here."""
 
 import copy
 import logging
@@ -85,7 +85,7 @@ DEFAULTS = {
     "ssd_subdir": "Confessions",
     "ssd_label": "",             # prefer the partition with this label
     "state_dir": "/var/lib/confession-booth",
-    "camera_settings_file": "/etc/confession-booth/camera.json",
+    "settings_file": "/etc/confession-booth/settings.json",
     "min_free_mb": 1024,         # stop / don't record below this
     "low_free_mb": 8192,         # status bar turns amber below this
     "health_interval": 15,
@@ -110,16 +110,18 @@ DEFAULTS = {
     "delete_confirm_text": "PRESS AGAIN TO DELETE",
     "deleted_text": "VIDEO DELETED",
 
+    # --- Web page -----------------------------------------------------------
+    # http://<booth address>/ to control the booth, change settings and
+    # download videos. 0 = off.
+    "web_port": 80,
+    "web_password": "",          # set one to ask for it (user name: booth)
+
     # --- System -----------------------------------------------------------
     "allow_shutdown": True,      # false = just quit (for testing)
     "log_file": True,
 }
 
 
-# Keys that `booth-camera` (camera_setup.py) may save in camera.json.
-CAMERA_KEYS = ("video_size", "framerate", "camera_format", "timestamp", "timestamp_corner",
-               "timestamp_format", "timestamp_size", "mirror_preview", "v4l2_controls",
-               "video_bitrate")
 
 
 def load(path=None, overrides=None):
@@ -147,15 +149,16 @@ def load(path=None, overrides=None):
         break
     if overrides:
         cfg.update(overrides)
-    for k, v in load_camera_settings(cfg["camera_settings_file"]).items():
+    from .settings import EDITABLE_KEYS
+    for k, v in load_saved_settings(cfg["settings_file"]).items():
         if k == "v4l2_controls" and isinstance(v, dict):
             cfg[k] = {**cfg[k], **v}
-        elif k in CAMERA_KEYS:
+        elif k in EDITABLE_KEYS:
             cfg[k] = v
     return cfg
 
 
-def load_camera_settings(path):
+def load_saved_settings(path):
     import json
     try:
         with open(path) as f:
@@ -177,7 +180,8 @@ def dev_overrides(base_dir):
         "ssd_mode": "directory",
         "ssd_mount": os.path.join(base_dir, "ssd"),
         "state_dir": os.path.join(base_dir, "state"),
-        "camera_settings_file": os.path.join(base_dir, "camera.json"),
+        "settings_file": os.path.join(base_dir, "settings.json"),
+        "web_port": 8080,
         "fullscreen": False,
         "allow_shutdown": False,
         "min_free_mb": 100,

@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111113">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Confession Booth</title>
+<style>
+  :root {
+    --bg: #111113; --card: #1c1c20; --line: #2c2c32; --text: #f2f2f2; --dim: #9a9aa2;
+    --red: #e5383b; --green: #2fb366; --amber: #ffb627; --blue: #4ea1ff;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  header { position: sticky; top: 0; z-index: 5; background: rgba(17,17,19,.94);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    padding: calc(10px + env(safe-area-inset-top)) 16px 0; border-bottom: 1px solid var(--line); }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+  h1 .dot { color: var(--red); }
+  .pill { font-size: 13px; padding: 4px 10px; border-radius: 99px; background: var(--line);
+    white-space: nowrap; }
+  .pill.rec { background: var(--red); }
+  .pill.ok { background: #1f3a2a; color: #8fe0b0; }
+  .pill.busy { background: #3a3220; color: var(--amber); }
+  .pill.off { background: #3a1f20; color: #ff9a9a; }
+  nav { display: flex; gap: 2px; overflow-x: auto; margin: 10px -16px 0; padding: 0 12px;
+    scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav button { flex: 1 0 auto; background: none; border: 0; color: var(--dim); font: inherit;
+    font-size: 15px; padding: 10px 12px; border-bottom: 2px solid transparent; cursor: pointer; }
+  nav button.on { color: var(--text); border-bottom-color: var(--red); }
+  main { max-width: 760px; margin: 0 auto; padding: 14px 16px calc(40px + env(safe-area-inset-bottom)); }
+  section { display: none; }
+  section.on { display: block; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim);
+    margin: 0 0 10px; font-weight: 600; }
+  .banner { border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px;
+    display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .banner.warn { background: #3a3220; color: #ffd98a; }
+  .banner.bad { background: #3a1f20; color: #ffb3b3; }
+  .banner.info { background: #1d2a3a; color: #b9dbff; }
+  .live { position: relative; background: #000; border-radius: var(--radius); overflow: hidden;
+    aspect-ratio: 16 / 9; margin-bottom: 10px; }
+  .live img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .live .msg { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; color: var(--dim); font-size: 14px; text-align: center; padding: 20px; }
+  .live.mirror img { transform: scaleX(-1); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row label, .row .k { flex: 1; min-width: 0; }
+  .row .help { display: block; color: var(--dim); font-size: 13px; }
+  .row .v { color: var(--dim); text-align: right; }
+  .note { font-size: 12px; color: var(--amber); margin-left: 6px; }
+  button.btn, a.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--line); color: var(--text); border: 0; border-radius: 12px; font: inherit;
+    font-weight: 600; padding: 12px 16px; cursor: pointer; text-decoration: none; }
+  .btn.red { background: var(--red); }
+  .btn.green { background: var(--green); }
+  .btn.small { padding: 8px 12px; font-size: 14px; }
+  .btn.wide { width: 100%; }
+  .btn:disabled { opacity: .45; }
+  .bigrec { width: 100%; padding: 18px; font-size: 19px; border-radius: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: #232328; border-radius: 12px; padding: 10px 12px; }
+  .stat .k { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; }
+  .stat .v { font-size: 17px; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+  .stat .s { font-size: 13px; color: var(--dim); }
+  .warnc { color: var(--amber) !important; } .badc { color: #ff8a8a !important; } .okc { color: #8fe0b0 !important; }
+  input[type=text], input[type=number], select {
+    background: #26262c; color: var(--text); border: 1px solid #3a3a42; border-radius: 10px;
+    font: inherit; padding: 9px 10px; max-width: 58%; }
+  input[type=text] { width: 58%; }
+  input[type=number] { width: 96px; text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--red); }
+  .slider { display: block; padding: 10px 0; border-top: 1px solid var(--line); }
+  .slider .top { margin-bottom: 4px; }
+  .slider .val { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .switch, .row label.switch { position: relative; width: 52px; height: 32px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: #3a3a42; border-radius: 99px; transition: .2s; }
+  .switch span::before { content: ""; position: absolute; width: 26px; height: 26px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + span { background: var(--green); }
+  .switch input:checked + span::before { transform: translateX(20px); }
+  .switch input:disabled + span { opacity: .4; }
+  .vid { display: grid; grid-template-columns: 112px 1fr; gap: 12px; align-items: center;
+    padding: 10px 0; border-top: 1px solid var(--line); }
+  .vid:first-child { border-top: 0; }
+  .vid .th { width: 112px; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden;
+    position: relative; cursor: pointer; border: 0; padding: 0; }
+  .vid .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vid .th::after { content: "▶"; position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; color: #fff; text-shadow: 0 1px 4px #000; font-size: 20px; }
+  .vid .t { font-weight: 600; }
+  .vid .m { font-size: 13px; color: var(--dim); }
+  .vid .acts { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--line); margin-left: 4px; }
+  .chip.safe { background: #1f3a2a; color: #8fe0b0; }
+  .chip.one { background: #3a3220; color: var(--amber); }
+  .chip.bad { background: #3a1f20; color: #ff9a9a; }
+  #player { position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 20; display: none;
+    flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #player.on { display: flex; }
+  #player video { width: 100%; max-height: 75vh; background: #000; border-radius: 10px; }
+  #player .bar { display: flex; gap: 10px; margin-top: 14px; }
+  pre#log { background: #0b0b0d; border-radius: 10px; padding: 10px; font-size: 11px; line-height: 1.35;
+    max-height: 50vh; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 0; }
+  #toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom));
+    transform: translateX(-50%) translateY(120px); background: #2a2a30; color: var(--text);
+    padding: 10px 16px; border-radius: 99px; transition: transform .25s; z-index: 30;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5); font-size: 15px; max-width: 90vw; }
+  #toast:not(.on) { visibility: hidden; }
+  #toast.on { transform: translateX(-50%) translateY(0); }
+  #toast.err { background: #5a2022; }
+  .muted { color: var(--dim); font-size: 14px; }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1><span class="dot">●</span> Confession Booth</h1>
+    <span id="statePill" class="pill">…</span>
+  </div>
+  <nav id="tabs">
+    <button data-tab="booth" class="on">Booth</button>
+    <button data-tab="camera">Camera</button>
+    <button data-tab="screen">Screen</button>
+    <button data-tab="videos">Videos</button>
+    <button data-tab="system">System</button>
+  </nav>
+</header>
+
+<main>
+  <div id="banners"></div>
+
+  <!-- ===================== BOOTH ===================== -->
+  <section id="booth" class="on">
+    <div class="live" id="liveBooth"><img alt=""><div class="msg">Live view off</div></div>
+    <div class="row" style="border:0;padding-top:0">
+      <span class="k">Live view <span class="help">Uses Wi-Fi; turn off when not needed</span></span>
+      <label class="switch"><input type="checkbox" id="liveOn" checked><span></span></label>
+    </div>
+    <div class="card">
+      <button class="btn red bigrec" id="recBtn">● Start recording</button>
+      <p class="muted" style="margin:8px 2px 0">Same as pressing the big red button: countdown on the
+        booth screen, then it records until you press again.</p>
+    </div>
+    <div class="card">
+      <h2>Status</h2>
+      <div class="grid" id="stats"></div>
+    </div>
+  </section>
+
+  <!-- ===================== CAMERA ===================== -->
+  <section id="camera">
+    <div class="live" id="liveCamera"><img alt=""><div class="msg">Live view off</div></div>
+    <p class="muted" style="margin:0 2px 14px">This is the full picture that gets recorded
+      (the booth screen may crop the sides). Changes show here within a second.</p>
+    <div class="card"><h2>Recording</h2><div id="set-Recording"></div></div>
+    <div class="card">
+      <h2>Picture</h2>
+      <div id="controls"><p class="muted">Loading…</p></div>
+      <button class="btn small" id="resetControls" style="margin-top:10px">Reset to camera defaults</button>
+    </div>
+    <div class="card">
+      <h2>Microphone</h2>
+      <div id="mic"><p class="muted">Loading…</p></div>
+    </div>
+  </section>
+
+  <!-- ===================== SCREEN ===================== -->
+  <section id="screen">
+    <div class="card"><h2>Booth screen</h2><div id="set-Screen"></div></div>
+    <div class="card"><h2>After recording</h2><div id="set-After recording"></div></div>
+    <div class="card"><h2>Words on screen</h2><div id="set-Words on screen"></div></div>
+  </section>
+
+  <!-- ===================== VIDEOS ===================== -->
+  <section id="videos">
+    <div class="card">
+      <div class="top" style="gap:10px;flex-wrap:wrap">
+        <span id="vidSummary" class="muted">Loading…</span>
+        <a class="btn small" id="zipAll" href="/all-videos.zip">⬇ Download all (.zip)</a>
+      </div>
+      <p class="muted" style="margin:10px 0 0">Tap a picture to watch. On iPhone, "Download" saves
+        to Files (Downloads); from there Share → Save Video puts it in Photos.</p>
+    </div>
+    <div class="card" id="vidList"></div>
+  </section>
+
+  <!-- ===================== SYSTEM ===================== -->
+  <section id="system">
+    <div class="card">
+      <h2>Clock</h2>
+      <div class="row"><span class="k">Booth</span><span class="v" id="piClock">…</span></div>
+      <div class="row"><span class="k">This phone</span><span class="v" id="phoneClock">…</span></div>
+      <button class="btn wide" id="setClock" style="margin-top:8px">Set the booth's clock from this phone</button>
+      <p class="muted" style="margin:8px 2px 0">File names and the date/time on videos use the booth's clock.
+        It has no battery, so set it after power-on if it isn't on the internet.</p>
+    </div>
+    <div class="card">
+      <h2>Booth</h2>
+      <div class="row"><span class="k">Booth Wi-Fi</span><span class="v" id="wifiName">—</span></div>
+      <div class="row"><span class="k">Restart the booth program</span>
+        <button class="btn small" id="restartBtn">Restart</button></div>
+      <div class="row"><span class="k">Shut down safely<span class="help">Saves, unmounts the SSD, powers off.
+        Same as holding the button.</span></span>
+        <button class="btn small red" id="shutdownBtn">Shut down</button></div>
+    </div>
+    <div class="card">
+      <h2>Log</h2>
+      <pre id="log">…</pre>
+      <button class="btn small" id="logBtn" style="margin-top:10px">Refresh</button>
+    </div>
+  </section>
+</main>
+
+<div id="player">
+  <video controls playsinline preload="metadata"></video>
+  <div class="bar">
+    <a class="btn green" id="playerDl" href="#">⬇ Download</a>
+    <button class="btn" id="playerClose">Close</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+let status = null, tab = "booth", fields = [], videosTimer = null;
+
+// ---------------------------------------------------------------- helpers
+async function api(path, body) {
+  const opt = body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"},
+                                         body: JSON.stringify(body)};
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+let toastTimer;
+function toast(msg, err) {
+  const t = $("#toast");
+  t.textContent = msg; t.className = "on" + (err ? " err" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = "", 2200);
+}
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null) e.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k !== null && k !== undefined)
+    e.append(k instanceof Node ? k : document.createTextNode(k));
+  return e;
+}
+const mmss = s => { s = Math.round(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+function nameDate(n) {
+  const m = n.match(/(\d{4})-(\d\d)-(\d\d)_(\d\d)-(\d\d)-(\d\d)/);
+  if (!m) return n;
+  const d = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return d.toLocaleString([], {weekday: "short", day: "numeric", month: "short",
+                               hour: "numeric", minute: "2-digit", second: "2-digit"});
+}
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+// ------------------------------------------------------------------- tabs
+function showTab(name) {
+  tab = name;
+  $$("nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  $$("main section").forEach(s => s.classList.toggle("on", s.id === name));
+  updateLive();
+  if (name === "camera") loadCamera();
+  if (name === "camera" || name === "screen") loadSettings();
+  if (name === "system") loadLog();
+  clearInterval(videosTimer);
+  if (name === "videos") { loadVideos(); videosTimer = setInterval(loadVideos, 10000); }
+  window.scrollTo(0, 0);
+}
+$$("nav button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+// -------------------------------------------------------------- live view
+function setStream(box, on) {
+  const img = $("img", box), msg = $(".msg", box);
+  if (on) {
+    if (!img.getAttribute("src")) {
+      img.src = "/preview.mjpg?fps=4&t=" + Date.now();
+      img.onerror = () => { msg.textContent = "No picture (camera starting?)"; msg.classList.remove("hide");
+                            img.removeAttribute("src"); setTimeout(updateLive, 3000); };
+      img.onload = () => msg.classList.add("hide");
+    }
+  } else if (img.getAttribute("src")) {
+    img.removeAttribute("src");            // closes the stream
+    const fresh = img.cloneNode(); img.replaceWith(fresh);
+    msg.textContent = "Live view off"; msg.classList.remove("hide");
+  }
+}
+function updateLive() {
+  const on = $("#liveOn").checked && !document.hidden;
+  setStream($("#liveBooth"), on && tab === "booth");
+  setStream($("#liveCamera"), on && tab === "camera");
+}
+$("#liveOn").addEventListener("change", updateLive);
+document.addEventListener("visibilitychange", () => { updateLive(); if (!document.hidden) poll(); });
+
+// ----------------------------------------------------------------- status
+const STATE_TEXT = {
+  starting: ["Starting", "busy"], idle: ["Ready", "ok"], countdown: ["Countdown", "rec"],
+  recording: ["Recording", "rec"], stopping: ["Saving", "busy"], review: ["Saving", "busy"],
+  confirm: ["Guest deleting?", "busy"], done: ["Saved", "ok"], deleted: ["Deleted", "busy"],
+  error: ["Couldn't record", "off"], shutdown: ["Shutting down", "off"],
+};
+async function poll() {
+  try { status = await api("/api/status"); render(); }
+  catch (e) { $("#statePill").textContent = "Offline"; $("#statePill").className = "pill off"; }
+}
+function render() {
+  const s = status;
+  const [txt, cls] = STATE_TEXT[s.state] || [s.state, ""];
+  $("#statePill").textContent = s.state === "recording" ? "● " + mmss(s.recording_seconds) : txt;
+  $("#statePill").className = "pill " + cls;
+
+  const b = $("#recBtn");
+  if (s.state === "recording") { b.textContent = "■ Stop recording  " + mmss(s.recording_seconds); b.disabled = false; }
+  else if (s.state === "idle" || s.state === "error") { b.textContent = "● Start recording"; b.disabled = !s.camera.ok; }
+  else if (s.state === "confirm") { b.textContent = "Confirm delete (guest asked)"; b.disabled = false; }
+  else { b.textContent = txt + "…"; b.disabled = true; }
+
+  // banners
+  const ban = $("#banners"); ban.innerHTML = "";
+  if (s.restart_needed) ban.append(el("div", {class: "banner warn"},
+      el("span", {}, "New resolution / frame rate: restart the booth to use it."),
+      el("button", {class: "btn small", onclick: restart}, "Restart now")));
+  const off = (s.clock * 1000 - Date.now()) / 1000;
+  if (Math.abs(off) > 90) ban.append(el("div", {class: "banner warn"},
+      el("span", {}, `The booth's clock is ${Math.round(Math.abs(off) / 60)} min ${off < 0 ? "behind" : "ahead"}.`),
+      el("button", {class: "btn small", onclick: setClock}, "Set from this phone")));
+  for (const [k, label] of [["ssd", "SSD"], ["sd", "microSD"]]) {
+    const d = s.drives[k];
+    if (d.problems.length) ban.append(el("div", {class: "banner bad"}, `${label}: ${d.problems.join(", ")}`));
+  }
+  if (s.damaged) ban.append(el("div", {class: "banner bad"}, `${s.damaged} recording(s) couldn't be verified - see System → Log.`));
+  if (s.undervolt) ban.append(el("div", {class: "banner warn"}, "Power supply too weak (under-voltage). Use the official supply / a powered hub for the SSD."));
+
+  // stats
+  const cam = s.camera, m = cam.mode;
+  const drive = (label, d) => {
+    const c = !d.present ? "badc" : d.level === "error" ? "badc" : d.low ? "warnc" : "okc";
+    return stat(label, d.present ? d.free_text + " free" : "Not connected",
+                d.present ? (d.low ? "Nearly full" : d.level === "error" ? "Problem" : "OK") : "Recording to the other drive", c);
+  };
+  $("#stats").replaceChildren(
+    stat("Camera", cam.name || "Not found", m ? `${m.w}×${m.h} · ${+m.fps} fps · ${m.encoder === "h264_v4l2m2m" ? "hardware" : m.encoder}` : "",
+         cam.ok ? "" : "badc"),
+    stat("Microphone", s.mic ? "OK" : "None", s.mic ? s.mic.replace(/^plughw:CARD=|,DEV=\d+$/g, "") : "Recording without sound", s.mic ? "" : "warnc"),
+    drive("SSD", s.drives.ssd), drive("microSD", s.drives.sd),
+    stat("Videos", String(s.videos), s.background_jobs ? "Checking " + s.background_jobs + "…" : "All checked"),
+    stat("Clock", s.clock_text.replace(/:\d\d$/, ""), ""),
+  );
+  $("#piClock").textContent = s.clock_text;
+  $("#phoneClock").textContent = new Date().toLocaleString([], {weekday: "short", day: "2-digit", month: "short",
+      year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false});
+  $("#wifiName").textContent = s.wifi && s.wifi.name ? s.wifi.name : "off";
+}
+function stat(k, v, sub, cls) {
+  return el("div", {class: "stat"}, el("div", {class: "k"}, k), el("div", {class: "v " + (cls || "")}, v),
+            sub ? el("div", {class: "s"}, sub) : null);
+}
+
+// ---------------------------------------------------------------- actions
+$("#recBtn").addEventListener("click", async () => {
+  await api("/api/action", {action: "record"}).catch(e => toast(e.message, true));
+  setTimeout(poll, 400);
+});
+async function restart() {
+  const r = await api("/api/action", {action: "restart"}).catch(e => ({error: e.message}));
+  if (r.ok) toast("Restarting… back in a few seconds"); else toast(r.error, true);
+}
+async function setClock() {
+  const r = await api("/api/action", {action: "clock", time: Date.now() / 1000}).catch(e => ({error: e.message}));
+  toast(r.ok ? "Clock set" + (r.note ? " (" + r.note + ")" : "") : (r.error || "Couldn't set the clock"), !r.ok);
+  poll();
+}
+$("#setClock").addEventListener("click", setClock);
+$("#restartBtn").addEventListener("click", restart);
+$("#shutdownBtn").addEventListener("click", async () => {
+  if (!confirm("Shut the booth down? Any recording is saved, the SSD is unmounted, then the Pi powers off.")) return;
+  await api("/api/action", {action: "shutdown"}).catch(() => {});
+  toast("Shutting down. Unplug when the Pi's green light stops.");
+});
+async function loadLog() {
+  const r = await api("/api/log").catch(() => ({lines: ["(couldn't load)"]}));
+  const pre = $("#log"); pre.textContent = r.lines.join("\n"); pre.scrollTop = pre.scrollHeight;
+}
+$("#logBtn").addEventListener("click", loadLog);
+
+// --------------------------------------------------------------- settings
+const LABELS = {max: "Best available (auto)", when_full: "When nearly full",
+  problems: "Nearly full or a problem", always: "Always"};
+async function loadSettings() {
+  const r = await api("/api/settings");
+  fields = r.fields;
+  const groups = {};
+  for (const f of fields) (groups[f.group] = groups[f.group] || []).push(f);
+  for (const [g, list] of Object.entries(groups)) {
+    const box = document.getElementById("set-" + g);
+    if (box) box.replaceChildren(...list.map(fieldRow));
+  }
+}
+function fieldRow(f) {
+  const save = async v => {
+    try {
+      const r = await api("/api/settings", {[f.key]: v});
+      if (r.errors[f.key]) return toast(r.errors[f.key], true);
+      f.value = r.applied[f.key];
+      toast(f.apply === "restart" ? "Saved - restart the booth to use it" : f.apply === "camera" ? "Saved" : "Saved, in use now");
+      if (r.restart_needed) poll();
+    } catch (e) { toast(e.message, true); }
+  };
+  const note = f.apply === "restart" ? el("span", {class: "note"}, "restart") : null;
+  const label = el("label", {}, f.label, note, f.help ? el("span", {class: "help"}, f.help) : null);
+  let input;
+  if (f.type === "bool") {
+    const cb = el("input", {type: "checkbox"}); cb.checked = !!f.value;
+    cb.addEventListener("change", () => save(cb.checked));
+    input = el("label", {class: "switch"}, cb, el("span"));
+  } else if (f.type === "int" || f.type === "float") {
+    input = el("input", {type: "number", min: f.min, max: f.max, step: f.step || 1, inputmode: "decimal"});
+    input.value = f.value;
+    input.addEventListener("change", () => save(input.value));
+  } else if (f.type === "select" || f.type === "resolution") {
+    input = el("select");
+    let opts = f.options || [];
+    if (!opts.map(String).includes(String(f.value))) opts = opts.concat([f.value]);
+    for (const o of opts) input.append(el("option", {value: o},
+        LABELS[o] || (f.key === "framerate" ? o + " fps" : String(o).replace("x", " × "))));
+    input.value = f.value;
+    input.addEventListener("change", () => save(input.value));
+  } else if (f.type === "strftime") {
+    input = el("select");
+    for (const o of f.options) input.append(el("option", {value: o}, f.examples[o]));
+    if (!f.options.includes(f.value)) input.append(el("option", {value: f.value}, f.value));
+    input.append(el("option", {value: "__custom"}, "Custom…"));
+    input.value = f.value;
+    input.addEventListener("change", () => {
+      if (input.value !== "__custom") return save(input.value);
+      const v = prompt("Format (strftime codes), e.g. %d/%m/%Y %H:%M:%S", f.value);
+      if (v) save(v).then(loadSettings); else input.value = f.value;
+    });
+  } else {
+    input = el("input", {type: "text", maxlength: 60});
+    input.value = f.value;
+    input.addEventListener("change", () => save(input.value));
+    input.addEventListener("keydown", e => { if (e.key === "Enter") input.blur(); });
+  }
+  return el("div", {class: "row"}, label, input);
+}
+
+// ------------------------------------------------------- camera controls
+const NICE = s => s.replace(/_/g, " ").replace(/\babsolute\b/, "").replace(/^./, c => c.toUpperCase());
+async function loadCamera() {
+  let r;
+  try { r = await api("/api/camera"); } catch (e) { $("#controls").textContent = e.message; return; }
+  const box = $("#controls");
+  if (!r.controls.length) { box.replaceChildren(el("p", {class: "muted"}, "No adjustable controls (camera not found, or the test picture).")); }
+  else box.replaceChildren(...r.controls.map(controlRow));
+  const mic = $("#mic");
+  const rows = r.mic.levels.map(l => sliderRow(l.name + " level", 0, 100, 1, l.percent, "%",
+      debounce(v => api("/api/mic", {name: l.name, percent: v}).then(x => toast(x.ok ? "Mic level set" : x.message, !x.ok)), 250)));
+  mic.replaceChildren(...(rows.length ? rows : [el("p", {class: "muted"}, r.mic.card ? "This microphone has no level control." : "No microphone found.")]),
+    el("p", {class: "muted", style: "margin:10px 2px 0"}, "If lips and sound don't line up, change 'Sound/picture sync' under Recording."));
+}
+function sliderRow(label, min, max, step, value, unit, onchange, disabled, help) {
+  const val = el("span", {class: "val"}, value + (unit || ""));
+  const r = el("input", {type: "range", min, max, step});
+  r.value = value; r.disabled = !!disabled;
+  r.addEventListener("input", () => { val.textContent = r.value + (unit || ""); onchange(+r.value); });
+  return el("div", {class: "slider"}, el("div", {class: "top"}, el("span", {}, label,
+      help ? el("span", {class: "help"}, help) : null), val), r);
+}
+function controlRow(c) {
+  const locked = (c.flags || "").includes("inactive");
+  const help = locked ? "Set automatically - turn the matching 'auto' setting off to change it" : null;
+  const send = debounce(v => api("/api/camera/control", {name: c.name, value: v})
+      .then(x => { if (!x.ok) toast(x.message || "Camera refused", true); }), 200);
+  if (c.type === "bool") {
+    const cb = el("input", {type: "checkbox"}); cb.checked = !!c.value; cb.disabled = locked;
+    cb.addEventListener("change", async () => { await send(cb.checked ? 1 : 0); setTimeout(loadCamera, 600); });
+    return el("div", {class: "row"}, el("label", {}, NICE(c.name), help ? el("span", {class: "help"}, help) : null),
+              el("label", {class: "switch"}, cb, el("span")));
+  }
+  if (c.type === "menu" || c.type === "intmenu") {
+    const s = el("select"); s.disabled = locked;
+    for (const [k, v] of Object.entries(c.menu)) s.append(el("option", {value: k}, v));
+    s.value = c.value;
+    s.addEventListener("change", () => { send(+s.value); setTimeout(loadCamera, 600); });
+    return el("div", {class: "row"}, el("label", {}, NICE(c.name), help ? el("span", {class: "help"}, help) : null), s);
+  }
+  return sliderRow(NICE(c.name), c.min, c.max, c.step || 1, c.value, "", send, locked,
+                   help || ("default " + c.default));
+}
+$("#resetControls").addEventListener("click", async () => {
+  await api("/api/action", {action: "camera_reset"}); toast("Camera back to defaults"); loadCamera();
+});
+
+// ------------------------------------------------------------------ videos
+async function loadVideos() {
+  let r;
+  try { r = await api("/api/videos"); } catch (e) { return; }
+  const total = r.videos.reduce((a, v) => a + v.size, 0);
+  $("#vidSummary").textContent = r.videos.length ? `${r.videos.length} video${r.videos.length > 1 ? "s" : ""} · ${total >= 1e9 ? (total / 1e9).toFixed(1) + " GB" : Math.max(1, Math.round(total / 1e6)) + " MB"}` : "No videos yet";
+  $("#zipAll").classList.toggle("hide", !r.videos.length);
+  const list = $("#vidList");
+  if (!r.videos.length) { list.replaceChildren(el("p", {class: "muted"}, "Recordings will appear here.")); return; }
+  const keep = new Set(r.videos.map(v => v.name));
+  for (const row of $$(".vid", list)) if (!keep.has(row.dataset.name)) row.remove();
+  let prev = null;
+  for (const v of r.videos) {
+    let row = list.querySelector(`.vid[data-name="${CSS.escape(v.name)}"]`);
+    const fresh = vidRow(v);
+    if (row) row.replaceWith(fresh); else if (prev) prev.after(fresh); else list.prepend(fresh);
+    prev = fresh;
+  }
+  $$(":scope > :not(.vid)", list).forEach(n => n.remove());
+}
+function vidRow(v) {
+  const u = encodeURIComponent(v.name);
+  const chip = v.state === "safe" ? el("span", {class: "chip safe"}, "✓ both drives")
+    : v.state === "one_copy" ? el("span", {class: "chip one"}, "1 drive")
+    : v.state === "damaged" ? el("span", {class: "chip bad"}, "check log")
+    : el("span", {class: "chip"}, "checking");
+  return el("div", {class: "vid", "data-name": v.name},
+    el("button", {class: "th", onclick: () => play(v), "aria-label": "Play"},
+       el("img", {src: "/thumb/" + u, loading: "lazy", alt: ""})),
+    el("div", {},
+      el("div", {class: "t"}, nameDate(v.name)),
+      el("div", {class: "m"}, `${mmss(v.seconds)} · ${v.size_text}`, chip),
+      el("div", {class: "acts"},
+        el("button", {class: "btn small", onclick: () => play(v)}, "▶ Play"),
+        el("a", {class: "btn small green", href: "/video/" + u + "?dl=1", download: v.name}, "⬇ Download"))));
+}
+function play(v) {
+  const u = encodeURIComponent(v.name);
+  const p = $("#player"), vid = $("video", p);
+  vid.src = "/video/" + u; $("#playerDl").href = "/video/" + u + "?dl=1";
+  $("#playerDl").setAttribute("download", v.name);
+  p.classList.add("on"); vid.play().catch(() => {});
+}
+$("#playerClose").addEventListener("click", () => {
+  const vid = $("#player video"); vid.pause(); vid.removeAttribute("src"); vid.load();
+  $("#player").classList.remove("on");
+});
+
+// -------------------------------------------------------------------- go
+poll(); setInterval(() => { if (!document.hidden) poll(); }, 2000);
+loadSettings().catch(() => {});
+updateLive();
+</script>
+</body>
+</html>

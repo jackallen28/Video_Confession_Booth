@@ -12,7 +12,7 @@
 Picture controls (brightness, exposure, white balance, focus, ...) change on
 the booth's screen straight away. Resolution and timestamp changes need the
 booth restarted (the menu offers it). Settings are saved in
-/etc/confession-booth/camera.json and survive reboots.
+/etc/confession-booth/settings.json (shared with the web page) and survive reboots.
 """
 
 import argparse
@@ -36,8 +36,8 @@ SERVICE = "confession-booth"
 class Setup:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.path = cfg["camera_settings_file"]
-        self.saved = config.load_camera_settings(self.path)
+        self.path = cfg["settings_file"]
+        self.saved = config.load_saved_settings(self.path)
         self.dev = devices.find_camera(cfg["camera"])
         self.restart_needed = False
 

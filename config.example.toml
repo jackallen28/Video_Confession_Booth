@@ -3,9 +3,10 @@
 #   sudo systemctl restart confession-booth
 # Every setting and its default is listed in booth/config.py.
 #
-# Camera settings (resolution, timestamp, brightness, exposure...) are easiest
-# to change over SSH with:   sudo booth-camera
-# Those are saved in /etc/confession-booth/camera.json and win over this file.
+# Most settings (resolution, timestamp, brightness, texts, timings...) are
+# easiest to change on the booth's web page: http://<booth address>/
+# (or over SSH with: sudo booth-camera). Those are saved in
+# /etc/confession-booth/settings.json and win over this file.
 
 # --- Camera ---
 # camera = "auto"              # or "/dev/video0"
@@ -43,6 +44,10 @@
 # saving_min_seconds = 5       # the "VIDEO SAVING" bar takes at least this long
 # delete_hold_seconds = 3      # hold this long on the saving screen to delete...
 # delete_confirm_seconds = 6   # ...then press again within this time
+
+# --- Web page ---
+# web_port = 80                # 0 = no web page
+# web_password = ""            # set one to protect the page (user name: booth)
 
 # --- Drives ---
 # sd_dir = "/srv/confessions"

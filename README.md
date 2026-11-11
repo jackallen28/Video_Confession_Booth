@@ -75,7 +75,7 @@ Button light (5 V LED button, through an NPN transistor):
    sudo reboot
    ```
    This installs ffmpeg, pygame and gpiozero, copies the program to `/opt/confession-booth`,
-   adds the `booth-camera` settings tool, and makes the booth start on the screen at power-on
+   adds the web page and the `booth-camera` / `booth-wifi` tools, and makes the booth start on the screen at power-on
    (no desktop, no login prompt, no boot text).
 3. Plug in the webcam, SSD, screen and button. The booth appears on the screen within a minute.
    **The first time** (and after changing camera or resolution settings) there's a spinner for a
@@ -96,27 +96,60 @@ with just the date and time it was recorded, e.g. `2026-11-11_21-04-33.mp4`.
 as this Pi can record it smoothly. The Pi 3B+'s hardware video encoder goes up to 1080p, so a 4K
 webcam records at 1920×1080. At first start each size is test-encoded for a few seconds (with the
 timestamp on, if it's on) and the biggest one that runs comfortably faster than real time is used.
-You can pick a fixed size with `sudo booth-camera` instead. `sudo booth-camera show` shows what
-is being recorded now.
+You can pick a fixed size on the web page (Camera tab) instead; the Booth tab shows what is
+being recorded now.
 
 Each recording is written to **both drives at the same time** by one ffmpeg process, so if a guest
 knocks the SSD cable out mid-recording the microSD copy keeps going (and the other way round). If
 the SSD isn't there at all, recording carries on to the microSD alone and the clips are copied to
 the SSD when it comes back. Roughly 4–5 GB per hour of recording at 1080p.
 
-## Connecting from your phone (booth Wi-Fi)
+## The web page (control it from your phone)
 
-The Pi can make its own Wi-Fi network, so you can reach it from your phone at the party with no
-router or internet:
+Open **http://10.42.0.1** on the booth Wi-Fi (below), or the Pi's address / `http://<hostname>.local`
+on your home network. It works with no internet. Tabs:
+
+![The web page on a phone: Booth, Camera, Screen, Videos and System tabs](docs/web.png)
+
+- **Booth:** live view from the camera, a **Start/Stop recording** button (same as the red
+  button: countdown on the booth screen), and status: camera and resolution, microphone, free space
+  on both drives, videos and background checks. Problems (drive faults, a weak power supply, the
+  booth's clock being wrong) show at the top.
+- **Camera:** the live view with everything to set it up:
+  - recording resolution and frame rate (restarts the booth to re-test them),
+  - date/time on the video (on/off, corner, format, size),
+  - longest recording, sound/picture sync,
+  - every picture control the webcam has, as sliders that change the picture live: brightness,
+    contrast, saturation, sharpness, white balance, exposure, backlight compensation, focus, zoom,
+    anti-flicker (50 Hz in Australia/UK/Europe), with "Reset to camera defaults",
+  - microphone level.
+- **Screen:** the booth's look and flow, all used straight away: mirror, countdown length, the
+  clapperboard on/off, when the free-space bar shows, the black and saving-bar times, hold-to-delete
+  and hold-to-shut-down times, and every word shown on the booth screen.
+- **Videos:** every recording with a thumbnail, length, size and whether it's verified on both
+  drives. Tap to watch, **Download** one, or **Download all (.zip)**. On iPhone, downloads go to
+  Files → Downloads; Share → Save Video puts one in Photos.
+- **System:** **set the booth's clock from your phone** (it has no clock battery), restart the
+  booth, shut down safely (same as holding the button 30 s), and the log.
+
+Settings are saved in `/etc/confession-booth/settings.json` and kept after a restart. Anyone who can
+reach the page can use it; to ask for a password, set `web_password = "..."` in
+`/etc/confession-booth/config.toml` (user name `booth`) and restart. `web_port = 0` turns the page off.
+
+Downloading big files while someone is recording is fine but slower; a zip of everything is easier
+when the party's over (or take the SSD out and plug it into a computer).
+
+### Booth Wi-Fi
+
+The Pi can make its own Wi-Fi network, so you can reach it at the party with no router or
+internet:
 
 ```bash
 sudo booth-wifi on        # prints the network name (ConfessionBooth) and password
 ```
 
-From then on (also after every reboot) the Pi broadcasts **ConfessionBooth**. On your phone,
-join it (it'll say "No internet", that's normal; stay connected), then open an SSH app (e.g.
-Termius on iPhone/Android) and connect to **10.42.0.1** with the Pi's username and password. There
-you can run `sudo booth-camera`, check the log, etc.
+From then on (also after every reboot) the Pi broadcasts **ConfessionBooth**. On your phone, join
+it (it'll say "No internet", that's normal; stay connected) and open **http://10.42.0.1**.
 
 ```bash
 sudo booth-wifi on "Booth" "secretpass"   # your own name and password (8+ characters)
@@ -124,38 +157,20 @@ sudo booth-wifi status                    # name, password, address, phones conn
 sudo booth-wifi off                       # stop it; the Pi joins your normal Wi-Fi again
 ```
 
-- While it's on, the Pi isn't on your home Wi-Fi, so it has no internet and can't set its clock
-  (use `sudo booth-camera time ...`). An Ethernet cable still works for internet, and then phones
-  on the booth Wi-Fi get internet through the Pi too.
+- While it's on, the Pi isn't on your home Wi-Fi, so it has no internet and can't set its own
+  clock: use **System → Set the booth's clock from this phone**. An Ethernet cable still works for
+  internet, and then phones on the booth Wi-Fi get internet through the Pi too.
 - If you run `on`/`off` over SSH through Wi-Fi, the session drops after 5 s; reconnect on the new
   network.
 - The Wi-Fi country must be set (Raspberry Pi Imager does it when you enter Wi-Fi details;
   otherwise `sudo raspi-config nonint do_wifi_country AU`).
 - It uses 2.4 GHz channel 6, which every phone supports. The Pi's antenna is small: expect a room or
-  two of range, more if the Pi isn't inside a metal box.
+  two of range, more if the Pi isn't inside a metal box. The live view uses a fair bit of Wi-Fi;
+  switch it off on the page when you don't need it.
 
-## Camera settings over SSH
+### Over SSH instead
 
-```bash
-ssh pi@<booth address>      # or 10.42.0.1 on the booth Wi-Fi
-sudo booth-camera
-```
-
-A menu to change:
-
-- **Resolution / frame rate:** "best available" (automatic) or any size the camera lists.
-- **Timestamp on the video:** on/off, which corner, format (e.g. `11/11/2026 21:04:33`), size.
-  It's burnt into the recording only, not shown on the booth screen.
-- **Picture controls:** whatever the webcam offers, typically brightness, contrast, saturation,
-  sharpness, white balance (auto or a fixed temperature), exposure (auto or fixed), backlight
-  compensation, focus, zoom and anti-flicker (`power_line_frequency`: 50 Hz in Australia/UK/Europe).
-  These change on the booth screen straight away.
-- **Mirror** the screen preview on/off, and **set the Pi's date and time** (it has no clock
-  battery; with Wi-Fi it sets itself).
-
-Resolution and timestamp changes need the booth restarted: the menu offers it (it won't restart
-while someone is recording). Settings are kept in `/etc/confession-booth/camera.json`.
-The same things work as one-liners:
+The same camera settings are in a menu: `ssh pi@10.42.0.1`, then `sudo booth-camera`. One-liners:
 
 ```bash
 sudo booth-camera show                    # settings, camera modes and all its controls
@@ -167,8 +182,8 @@ sudo booth-camera time "2026-12-31 21:30"
 sudo booth-camera restart
 ```
 
-Other settings (texts on screen, timings, pins, drives) are in `/etc/confession-booth/config.toml`
-(all options are in [`config.example.toml`](config.example.toml)); after changing them:
+Other settings (pins, drives, web password) are in `/etc/confession-booth/config.toml` (all options
+are in [`config.example.toml`](config.example.toml)); after changing them:
 `sudo systemctl restart confession-booth`.
 
 ## How the files are checked
@@ -230,7 +245,8 @@ No Pi needed (Linux or Mac with Python 3.11+, ffmpeg and `pip install pygame`):
 
 ```bash
 python3 -m booth --dev               # window, test picture + tone, space bar = the button, Esc = quit
-python3 -m booth.camera_setup --dev  # the settings menu, saving to ./booth-data/camera.json
+                                     # web page: http://localhost:8080
+python3 -m booth.camera_setup --dev  # the SSH settings menu, saving to ./booth-data/settings.json
 ```
 
 Recordings go to `./booth-data/` (a plain folder stands in for the SSD).
@@ -240,6 +256,7 @@ Tests:
 ```bash
 python3 tests/test_storage.py      # MP4 + names, verification, SSD unplugged then back, corruption repair, crash recovery, delete
 python3 tests/test_devices.py      # reading the webcam's modes and controls, resolution choice
+python3 tests/test_web.py          # the web page: settings, live view, record, play/download, zip
 python3 tests/run_headless.py      # whole booth with no screen: keeps one clip, deletes one, shuts down; saves screenshots
 ```
 
@@ -253,7 +270,8 @@ python3 tests/run_headless.py      # whole booth with no screen: keeps one clip,
 - **Quiet sound:** `alsamixer`, then F6 to pick the webcam and F4 for capture levels.
 - **Lips out of sync:** set `av_offset` (seconds, e.g. `0.1` if the picture is ahead of the sound).
 - **Choppy preview:** set `preview_fps = 10`. Recordings are not affected.
-- **Wrong time in file names / timestamp:** `sudo booth-camera time "2026-12-31 21:30"`, or give
+- **Wrong time in file names / timestamp:** web page → System → set the clock from your phone,
+  `sudo booth-camera time "2026-12-31 21:30"`, or give
   the Pi Wi-Fi for a minute.
 - **Stop the booth to use the console:** `sudo systemctl stop confession-booth`
   (`disable` to stop it starting at boot).

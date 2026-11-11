@@ -74,7 +74,7 @@ def test_modes():
 
 
 def test_candidates_capped_at_1080p():
-    cfg = config.load(overrides={"camera_settings_file": "/nonexistent"})
+    cfg = config.load(overrides={"settings_file": "/nonexistent"})
     with mock.patch.object(devices, "_v4l2", fake_v4l2):
         cands, forced = video._candidates(cfg, "/dev/video0")
     assert (cands[0]["w"], cands[0]["h"]) == (1920, 1080) and not forced
@@ -96,16 +96,18 @@ def test_controls():
     assert order == ["auto_exposure", "exposure_time_absolute"]
 
 
-def test_camera_json_overrides():
+def test_saved_settings_override():
     with tempfile.TemporaryDirectory() as tmp:
-        p = os.path.join(tmp, "camera.json")
+        p = os.path.join(tmp, "settings.json")
         with open(p, "w") as f:
-            f.write('{"timestamp": true, "v4l2_controls": {"brightness": 150}, "idle_text": "x"}')
-        cfg = config.load(overrides={"camera_settings_file": p,
+            f.write('{"timestamp": true, "v4l2_controls": {"brightness": 150}, "idle_text": "x",'
+                    ' "led_pin": 5}')
+        cfg = config.load(overrides={"settings_file": p,
                                      "v4l2_controls": {"sharpness": 2}})
     assert cfg["timestamp"] is True
     assert cfg["v4l2_controls"] == {"sharpness": 2, "brightness": 150}
-    assert cfg["idle_text"] != "x"            # only camera keys come from camera.json
+    assert cfg["idle_text"] == "x"
+    assert cfg["led_pin"] != 5                # only web-editable keys come from settings.json
 
 
 if __name__ == "__main__":

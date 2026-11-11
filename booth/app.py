@@ -24,6 +24,7 @@ from .led import Led
 from .recorder import Recorder
 from .storage import Storage
 from .ui import UI
+from .web import Web
 
 log = logging.getLogger("booth.app")
 
@@ -78,6 +79,8 @@ class App:
         self.save_done.set()         # nothing being saved yet
         self._delete_thread = None
         self.no_camera = False
+        self.restart_needed = False   # a setting changed that needs a restart
+        self.web = Web(self)
         self.save_ok = False
         self.review_t0 = 0.0
         self.frozen = None
@@ -86,6 +89,7 @@ class App:
     # ------------------------------------------------------------------ loop
     def run(self):
         self.storage.start()
+        self.web.start()
         threading.Thread(target=self._prepare_camera, name="prepare", daemon=True).start()
         clock = pygame.time.Clock()
         while self.running:
@@ -277,7 +281,20 @@ class App:
                 kind, val = self.events.get_nowait()
             except queue.Empty:
                 return
-            if kind == "no_camera":
+            if kind == "web_press":            # "record/stop" on the web page
+                if self.state in ("idle", "error", "recording", "confirm"):
+                    self.on_press()
+            elif kind == "restart":
+                log.warning("restart requested from the web page")
+                self.exit_code = 3
+                self.running = False
+            elif kind == "shutdown":
+                if self.state != "shutdown":
+                    self.start_shutdown()
+            elif kind == "camera_restart":
+                if self.camera:
+                    self.camera.restart()
+            elif kind == "no_camera":
                 self.no_camera = True
             elif kind == "camera_ready":
                 self.device, self.mode = val

@@ -215,8 +215,6 @@ class Storage:
         self.drives = [self.ssd, self.sd]
         os.makedirs(cfg["state_dir"], exist_ok=True)
         self.manifest = Manifest(os.path.join(cfg["state_dir"], "manifest.json"))
-        self.min_free = int(cfg["min_free_mb"]) * 1_000_000
-        self.low_free = int(cfg["low_free_mb"]) * 1_000_000
         self.recording = threading.Event()   # set by the app while recording
         self.active_name = None
         self.held = set()            # recordings waiting for the guest's keep/delete
@@ -231,6 +229,21 @@ class Storage:
         self._scrub_pos = 0
         self._ssd_device = None
         self.undervolt = False       # Pi power supply too weak (risk of corruption)
+
+    @property
+    def min_free(self):
+        return int(self.cfg["min_free_mb"]) * 1_000_000
+
+    @property
+    def low_free(self):       # can change from the web page
+        return int(self.cfg["low_free_mb"]) * 1_000_000
+
+    def video_path(self, name):
+        """Path of the best copy to read (SSD first), or None."""
+        for d in self.drives:
+            if d.present and os.path.exists(d.path(name)):
+                return d.path(name)
+        return None
 
     # ------------------------------------------------------------ lifecycle
     def start(self):

@@ -42,6 +42,9 @@ def main():
         code = App(cfg).run()
     finally:
         pygame.quit()
+    if code == 3 and not os.environ.get("INVOCATION_ID"):
+        # restart requested; under systemd the service restarts us, otherwise do it here
+        os.execv(sys.executable, [sys.executable, "-m", "booth"] + sys.argv[1:])
     sys.exit(code)
 
 

@@ -126,6 +126,47 @@ def apply_camera_controls(dev, controls):
             log.warning("camera setting %s=%s not applied: %s", k, v, msg)
 
 
+def mic_card(mic):
+    """'plughw:CARD=C920,DEV=0' -> 'C920'."""
+    m = re.search(r"CARD=([^,]+)", mic or "")
+    return m.group(1) if m else None
+
+
+def _amixer(args):
+    try:
+        r = subprocess.run(["amixer"] + args, capture_output=True, timeout=10)
+        return r.returncode, r.stdout.decode(errors="replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        return -1, str(e)
+
+
+def mic_levels(card):
+    """Capture volume controls of a sound card -> [{"name", "percent"}]."""
+    if not card:
+        return []
+    rc, out = _amixer(["-c", card, "scontents"])
+    result, name, caps = [], None, ""
+    for line in out.splitlines():
+        m = re.match(r"Simple mixer control '(.+)',(\d+)", line)
+        if m:
+            name, caps = m.group(1), ""
+            continue
+        if "Capabilities:" in line:
+            caps = line
+            continue
+        m = re.search(r"Capture.*\[(\d+)%\]", line)
+        if m and name and "cvolume" in caps and not any(r["name"] == name for r in result):
+            result.append({"name": name, "percent": int(m.group(1))})
+    return result
+
+
+def set_mic_level(card, name, percent):
+    rc, out = _amixer(["-c", card, "sset", name, f"{int(percent)}%"])
+    if rc == 0:
+        subprocess.run(["alsactl", "store"], capture_output=True)   # keep after reboot
+    return rc == 0, out.strip()[-200:]
+
+
 def find_microphone(setting):
     """Returns an ALSA device string, "test", or None for no sound."""
     if setting in ("none", "", None):
