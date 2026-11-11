@@ -84,7 +84,8 @@ print("recording mode:", app.mode)
 # ---- clip 1: keep
 press()
 run(0.4); shot("02_countdown")
-run(until=state("recording")); run(0.15); shot("03_action")
+run(until=state("recording")); run(0.15); shot("03_recording_starts")
+assert not app._status_visible(app._snap), "free-space bar should be hidden"
 run(4.0); shot("04_recording")
 press()
 run(0.12); shot("05_tv_off_squash")

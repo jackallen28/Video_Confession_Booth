@@ -37,6 +37,7 @@
 
 # --- Recording ---
 # countdown_from = 3
+# action_animation = false     # true = clapperboard + "ACTION!" after the countdown
 # max_record_seconds = 300     # stops by itself after 5 minutes
 # black_seconds = 2            # after STOP: TV switch-off, then black for this long
 # saving_min_seconds = 5       # the "VIDEO SAVING" bar takes at least this long
@@ -48,6 +49,11 @@
 # ssd_label = ""               # set to the SSD's name if more than one USB drive is plugged in
 # ssd_subdir = "Confessions"
 # min_free_mb = 1024
+
+# --- Screen ---
+# status_bar = "when_full"     # free space shows only when a drive is nearly full;
+#                              # "problems" = also drive faults, no SSD/mic, power; "always"
+# low_free_mb = 8192           # "nearly full" = less than this left
 
 # --- Screen text ---
 # idle_text = "PRESS BUTTON TO RECORD"

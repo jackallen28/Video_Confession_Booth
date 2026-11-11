@@ -1,16 +1,16 @@
 # Confession Booth (Raspberry Pi 3B+)
 
 A reality-TV "confession booth" for a party. Guests step in front of the webcam, press the big red
-button, get a 3-2-1 countdown and a clapperboard **ACTION!**, say their piece, and press the button
+button, get a 3-2-1 countdown, say their piece, and press the button
 again to stop. Every clip is saved as an MP4 to an external SSD **and** the microSD card, then checked.
 
-![Screens: idle, countdown, ACTION, recording, TV switch-off, saving, hold to delete, confirm delete, saved](docs/screens.png)
+![Screens: idle, countdown, recording, TV switch-off, saving, hold to delete, confirm delete, saved, nearly-full warning](docs/screens.png)
 *(Screenshots from the built-in test picture. On the booth it's the live camera.)*
 
 - **Idle:** live camera (mirrored like a mirror) with a slightly see-through red button and
   `PRESS BUTTON TO RECORD`. The light in the button slowly breathes.
-- **Press:** 3-2-1 film-leader countdown (the button flashes with each number), then a clapperboard
-  snaps shut with a flash: **ACTION!**
+- **Press:** 3-2-1 film-leader countdown (the button flashes with each number), then recording
+  starts. (A clapperboard **ACTION!** animation can be switched on with `action_animation = true`.)
 - **Recording:** a small flashing red dot and the time. The button light flashes with the dot.
 - **Press again:** the picture switches off like an old TV (squashes to a line, then a dot), 2 s of
   black, then **VIDEO SAVING** with a loading bar (at least 5 s) and
@@ -18,8 +18,9 @@ again to stop. Every clip is saved as an MP4 to an external SSD **and** the micr
 - **Delete:** on the saving screen, hold the button for 3 s (a red ring fills, the light flickers
   faster), let go, then press once more within 6 s (`PRESS AGAIN TO DELETE`, light blinking fast).
   The clip is removed from both drives: **VIDEO DELETED**. Not pressed = kept.
-- **Bottom bar:** free space on the SSD (box icon) and microSD (card icon). Icons on the right
-  appear only when something needs attention (see [Status bar](#status-bar)).
+- **Free space:** nothing on screen normally. When a drive is nearly full (under 8 GB left), a bar
+  comes up at the bottom with the free space on the SSD (box icon) and microSD (card icon)
+  (see [Status bar](#status-bar)).
 - **Hold the button for 30 s:** a ring fills up from 2 s; at 30 s the recording (if any) is saved,
   the SSD is unmounted and powered off (SSD icon turns green ✓), then the Pi shuts down.
   Let go before 30 s to cancel.
@@ -165,6 +166,10 @@ A record of every clip and every check (including deleted ones) is kept in
 `/var/lib/confession-booth/manifest.json` (and copied to the SSD as `booth-manifest.json`).
 
 ## Status bar
+
+Hidden unless a drive is nearly full (`low_free_mb`, 8 GB). Set `status_bar = "problems"` in
+`/etc/confession-booth/config.toml` to also bring it up for drive faults, a missing SSD or mic, and
+power warnings, or `"always"` to keep it on screen. Drive faults are always in the log either way.
 
 | Shows | Means |
 |-------|-------|

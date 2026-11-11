@@ -1,6 +1,6 @@
 """The booth: one screen, one button (with a light in it).
 
-idle --press--> 3-2-1 + clapperboard --> recording --press--> TV switch-off,
+idle --press--> 3-2-1 (+ clapperboard if switched on) --> recording --press--> TV switch-off,
 black --> "VIDEO SAVING" + loading bar (hold 3 s, then press again = delete)
 --> "VIDEO SAVED" --> idle.
 Hold the button for 30 s at any time: finish up, unmount the SSD, power off.
@@ -291,7 +291,8 @@ class App:
         el = now - self.state_t
         if self.state == "countdown":
             n = cfg["countdown_from"]
-            if el >= n + self.ui.CLAP_AT and self.recorder.action_at is None:
+            clap = self.ui.CLAP_AT if cfg["action_animation"] else 0.0
+            if el >= n + clap and self.recorder.action_at is None:
                 self.recorder.mark_action()
                 self.clapper_t0 = self.state_t + n
                 self.set_state("recording")
@@ -379,25 +380,39 @@ class App:
                 n = cfg["countdown_from"]
                 if el < n:
                     ui.countdown(n - int(el), el % 1.0)
-                else:
+                elif cfg["action_animation"]:
                     ui.clapper(el - n)
             elif st == "recording":
-                ui.clapper(now - self.clapper_t0)
+                if cfg["action_animation"]:
+                    ui.clapper(now - self.clapper_t0)
                 ui.recording(self.recorder.elapsed(),
                              cfg["max_record_seconds"] - self.recorder.elapsed(), now)
             elif st == "error":
                 ui.saved(False, el)
 
+        if now - self._snap_t > 0.5:
+            self._snap = self.storage.snapshot()
+            self._snap_t = now
         if st not in ("stopping", "review", "confirm", "deleted") and \
-                not (st == "done" and el < DONE_SHOW):
-            if now - self._snap_t > 0.5:
-                self._snap = self.storage.snapshot()
-                self._snap_t = now
+                not (st == "done" and el < DONE_SHOW) and self._status_visible(self._snap):
             ui.status_bar(self._snap, bool(self.mic), now)
 
         if self._hold_kind(now) == "shutdown":
             span = cfg["hold_shutdown_seconds"] - cfg["hold_feedback_after"]
             ui.hold((now - self.press_t - cfg["hold_feedback_after"]) / span)
+
+    def _status_visible(self, snap):
+        """The free-space bar only comes up when it matters (see status_bar setting)."""
+        mode = self.cfg["status_bar"]
+        if mode == "always":
+            return True
+        drives = [snap.get("ssd", {}), snap.get("sd", {})]
+        if any(d.get("low") for d in drives):
+            return True
+        if mode == "problems":
+            return bool(snap.get("damaged") or snap.get("undervolt") or not self.mic
+                        or any(d.get("level") in ("error", "missing") for d in drives))
+        return False
 
     def _draw_camera(self, now):
         if self.camera is None or (not self.camera.ok and self.state not in ("countdown",
@@ -437,7 +452,8 @@ class App:
         elif st == "idle":
             pattern = "idle" if self.camera and self.camera.ok else "problem"
         elif st == "countdown":
-            pattern = "countdown" if now - self.state_t < self.cfg["countdown_from"] else "action"
+            pattern = "countdown" if now - self.state_t < self.cfg["countdown_from"] \
+                or not self.cfg["action_animation"] else "action"
         elif st == "recording":
             pattern = "recording"
         elif st == "confirm":

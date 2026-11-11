@@ -64,6 +64,9 @@ DEFAULTS = {
 
     # --- Recording --------------------------------------------------------
     "countdown_from": 3,
+    # Clapperboard + "ACTION!" after the countdown. Off = recording starts
+    # straight after "1".
+    "action_animation": False,
     "max_record_seconds": 300,   # auto stop
     "ignore_stop_for": 1.0,      # ignore a 2nd press right after ACTION
     # After STOP: TV switch-off, black, then the "saving" screen with a bar.
@@ -92,6 +95,10 @@ DEFAULTS = {
     "copy_mb_per_s_while_recording": 6,
 
     # --- Screen -----------------------------------------------------------
+    # Free-space bar at the bottom: "when_full" (only when a drive is nearly
+    # full, i.e. under low_free_mb), "problems" (also for drive faults, missing
+    # SSD/mic, power warnings) or "always".
+    "status_bar": "when_full",
     "fullscreen": True,
     "window_size": "800x480",    # only when fullscreen = false
     "idle_text": "PRESS BUTTON TO RECORD",

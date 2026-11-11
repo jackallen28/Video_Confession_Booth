@@ -109,7 +109,7 @@ class Drive:
 
     def snapshot(self):
         return {"present": self.present, "level": self.level, "free": self.free,
-                "errors": dict(self.errors)}
+                "low": self.present and self.low, "errors": dict(self.errors)}
 
 
 def _mounts():
