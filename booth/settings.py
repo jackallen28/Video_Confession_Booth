@@ -34,10 +34,10 @@ FIELDS = [
     # --- booth screen
     dict(key="mirror_preview", group="Screen", label="Mirror the screen (like a mirror)",
          type="bool", apply="camera", help="Recordings are never mirrored"),
-    dict(key="countdown_from", group="Screen", label="Countdown from", type="int", min=0, max=10,
+    dict(key="start_animation", group="Screen", label="Before recording", type="select",
+         options=["countdown", "clapperboard", "both", "none"], apply="live"),
+    dict(key="countdown_from", group="Screen", label="Countdown from", type="int", min=1, max=10,
          apply="live"),
-    dict(key="action_animation", group="Screen", label="Clapperboard ACTION! after the countdown",
-         type="bool", apply="live"),
     dict(key="status_bar", group="Screen", label="Free-space bar", type="select", apply="live",
          options=["when_full", "problems", "always"]),
     dict(key="low_free_mb", group="Screen", label="'Nearly full' below (MB)", type="int",

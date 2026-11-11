@@ -407,7 +407,9 @@ $("#logBtn").addEventListener("click", loadLog);
 
 // --------------------------------------------------------------- settings
 const LABELS = {max: "Best available (auto)", when_full: "When nearly full",
-  problems: "Nearly full or a problem", always: "Always"};
+  problems: "Nearly full or a problem", always: "Always",
+  countdown: "3-2-1 countdown", clapperboard: "Clapperboard ACTION!", both: "Countdown, then clapperboard",
+  none: "Nothing (record straight away)"};
 async function loadSettings() {
   const r = await api("/api/settings");
   fields = r.fields;

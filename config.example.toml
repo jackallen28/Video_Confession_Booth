@@ -38,7 +38,7 @@
 
 # --- Recording ---
 # countdown_from = 3
-# action_animation = false     # true = clapperboard + "ACTION!" after the countdown
+# start_animation = "countdown"   # "clapperboard" instead, "both", or "none"
 # max_record_seconds = 300     # stops by itself after 5 minutes
 # black_seconds = 2            # after STOP: TV switch-off, then black for this long
 # saving_min_seconds = 5       # the "VIDEO SAVING" bar takes at least this long

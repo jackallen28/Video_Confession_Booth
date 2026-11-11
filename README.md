@@ -10,7 +10,8 @@ again to stop. Every clip is saved as an MP4 to an external SSD **and** the micr
 - **Idle:** live camera (mirrored like a mirror) with a slightly see-through red button and
   `PRESS BUTTON TO RECORD`. The light in the button slowly breathes.
 - **Press:** 3-2-1 film-leader countdown (the button flashes with each number), then recording
-  starts. (A clapperboard **ACTION!** animation can be switched on with `action_animation = true`.)
+  starts. Or, set on the web page (Screen → Before recording): a clapperboard snapping shut with
+  **ACTION!** instead, the countdown then the clapperboard, or nothing.
 - **Recording:** a small flashing red dot and the time. The button light flashes with the dot.
 - **Press again:** the picture switches off like an old TV (squashes to a line, then a dot), 2 s of
   black, then **VIDEO SAVING** with a loading bar (at least 5 s) and
@@ -123,8 +124,8 @@ on your home network. It works with no internet. Tabs:
     contrast, saturation, sharpness, white balance, exposure, backlight compensation, focus, zoom,
     anti-flicker (50 Hz in Australia/UK/Europe), with "Reset to camera defaults",
   - microphone level.
-- **Screen:** the booth's look and flow, all used straight away: mirror, countdown length, the
-  clapperboard on/off, when the free-space bar shows, the black and saving-bar times, hold-to-delete
+- **Screen:** the booth's look and flow, all used straight away: mirror, what comes before
+  recording (3-2-1 countdown, clapperboard ACTION!, both, or nothing) and the countdown length, when the free-space bar shows, the black and saving-bar times, hold-to-delete
   and hold-to-shut-down times, and every word shown on the booth screen.
 - **Videos:** every recording with a thumbnail, length, size and whether it's verified on both
   drives. Tap to watch, **Download** one, or **Download all (.zip)**. On iPhone, downloads go to

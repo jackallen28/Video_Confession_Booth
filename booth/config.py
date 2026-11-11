@@ -64,9 +64,10 @@ DEFAULTS = {
 
     # --- Recording --------------------------------------------------------
     "countdown_from": 3,
-    # Clapperboard + "ACTION!" after the countdown. Off = recording starts
-    # straight after "1".
-    "action_animation": False,
+    # What guests see before recording starts: "countdown" (3-2-1),
+    # "clapperboard" (clapperboard ACTION! instead of the countdown), "both"
+    # (countdown, then clapperboard) or "none" (records straight away).
+    "start_animation": "countdown",
     "max_record_seconds": 300,   # auto stop
     "ignore_stop_for": 1.0,      # ignore a 2nd press right after ACTION
     # After STOP: TV switch-off, black, then the "saving" screen with a bar.

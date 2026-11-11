@@ -187,6 +187,14 @@ class App:
         elif self.state == "confirm":
             self.delete_clip()
 
+    def _intro(self):
+        """-> (countdown seconds, clapperboard?, seconds the open clapperboard is
+        held first) from the start_animation setting."""
+        mode = self.cfg["start_animation"]
+        n = int(self.cfg["countdown_from"]) if mode in ("countdown", "both") else 0
+        # On its own, the clapperboard gives guests a moment before it snaps.
+        return n, mode in ("clapperboard", "both"), 1.2 if mode == "clapperboard" else 0.0
+
     def _hold_kind(self, now):
         """What a held button is doing right now: None, "delete" or "shutdown"."""
         if self.press_t is None or self.state == "shutdown":
@@ -305,10 +313,10 @@ class App:
 
     def _update(self, now):
         cfg = self.cfg
-        el = now - self.state_t
+        el = max(0.0, now - self.state_t)   # state may have changed after `now`
         if self.state == "countdown":
-            n = cfg["countdown_from"]
-            clap = self.ui.CLAP_AT if cfg["action_animation"] else 0.0
+            n, clapper, lead = self._intro()
+            clap = self.ui.CLAP_AT + lead if clapper else 0.0
             if el >= n + clap and self.recorder.action_at is None:
                 self.recorder.mark_action()
                 self.clapper_t0 = self.state_t + n
@@ -363,7 +371,7 @@ class App:
     def _draw(self, now):
         ui, cfg = self.ui, self.cfg
         st = self.state
-        el = now - self.state_t
+        el = max(0.0, now - self.state_t)   # state may have changed after `now`
         if st == "shutdown":
             ui.shutdown(self.shutdown_stage, now)
             return
@@ -394,14 +402,15 @@ class App:
             if st == "idle" and self.camera and self.camera.ok:
                 ui.idle(now, pressed)
             elif st == "countdown":
-                n = cfg["countdown_from"]
+                n, clapper, lead = self._intro()
                 if el < n:
                     ui.countdown(n - int(el), el % 1.0)
-                elif cfg["action_animation"]:
-                    ui.clapper(el - n)
+                elif clapper:
+                    ui.clapper(el - n, lead)
             elif st == "recording":
-                if cfg["action_animation"]:
-                    ui.clapper(now - self.clapper_t0)
+                _, clapper, lead = self._intro()
+                if clapper:
+                    ui.clapper(now - self.clapper_t0, lead)
                 ui.recording(self.recorder.elapsed(),
                              cfg["max_record_seconds"] - self.recorder.elapsed(), now)
             elif st == "error":
@@ -469,8 +478,8 @@ class App:
         elif st == "idle":
             pattern = "idle" if self.camera and self.camera.ok else "problem"
         elif st == "countdown":
-            pattern = "countdown" if now - self.state_t < self.cfg["countdown_from"] \
-                or not self.cfg["action_animation"] else "action"
+            n, clapper, _ = self._intro()
+            pattern = "countdown" if now - self.state_t < n or not clapper else "action"
         elif st == "recording":
             pattern = "recording"
         elif st == "confirm":

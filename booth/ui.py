@@ -251,8 +251,12 @@ class UI:
         self.slate_y = int(H * 0.02 + headroom + sh)
         self.ch = int(self.slate_y + bh + H * 0.2)
 
-    def clapper(self, t):
-        """t = seconds since the animation started. Returns False when done."""
+    def clapper(self, t, lead=0.0):
+        """t = seconds since the animation started; lead = extra seconds the open
+        clapperboard is held before it snaps (when it replaces the countdown).
+        Returns False when done."""
+        if t > 0.30:
+            t = 0.30 if t < 0.30 + lead else t - lead
         if t > self.CLAP_END:
             return False
         H = self.H
