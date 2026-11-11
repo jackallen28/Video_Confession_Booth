@@ -4,7 +4,8 @@ Records a clip and keeps it, records a second one and deletes it (hold 3 s,
 press again), then holds the button to shut down. Saves a screenshot of every
 screen and checks the kept clip is a verified MP4 on both "drives".
 
-    python3 tests/run_headless.py [out_dir] [--size 800x480] [--timestamp]
+    python3 tests/run_headless.py [out_dir] [--size 800x480] [--timestamp] [--set key=value ...]
+    e.g. --set orientation=portrait --set screen_rotation=none
 """
 
 import json
@@ -25,6 +26,11 @@ from booth import config, media  # noqa: E402
 from booth.app import App  # noqa: E402
 
 args = [a for a in sys.argv[1:]]
+extra = {}
+for i, a in enumerate(args):
+    if a == "--set":
+        k, _, v = args[i + 1].partition("=")
+        extra[k] = v
 size = args[args.index("--size") + 1] if "--size" in args else "800x480"
 out = args[0] if args and not args[0].startswith("--") else "/tmp/booth-test"
 data = os.path.join(out, "data")
@@ -34,7 +40,8 @@ logging.basicConfig(level=logging.INFO, format="%(relativeCreated)7.0f %(name)s:
 
 cfg = config.load(overrides=dict(config.dev_overrides(data), camera="test", window_size=size,
                                  hold_shutdown_seconds=8, log_file=False,
-                                 timestamp="--timestamp" in args, max_video_size="1280x720"))
+                                 timestamp="--timestamp" in args, max_video_size="1280x720",
+                                 **extra))
 os.makedirs(cfg["ssd_mount"])   # the "SSD" is a plain folder here
 pygame.display.init()
 pygame.font.init()
@@ -63,6 +70,8 @@ def run(seconds=None, until=None, timeout=90):
 
 def shot(name):
     pygame.image.save(app.screen, os.path.join(out, f"{name}.png"))
+    if app.screen_turn:          # what the physical (turned) screen shows
+        pygame.image.save(app.display, os.path.join(out, f"{name}-display.png"))
 
 
 def press(hold=0.1):

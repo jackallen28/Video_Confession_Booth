@@ -30,11 +30,12 @@ class UI:
     def __init__(self, screen, cfg):
         self.screen = screen
         self.W, self.H = screen.get_size()
-        self.u = self.H / 480.0
+        self.S = min(self.W, self.H)      # size unit: works in portrait too
+        self.u = self.S / 480.0
         self.cfg = cfg
         self._fonts = {}
         self._texts = {}
-        self.sb = max(26, int(self.H * 0.072))           # status bar height
+        self.sb = max(26, int(self.S * 0.072))           # status bar height
         self._build_clapper()
 
     # ---------------------------------------------------------------- helpers
@@ -142,20 +143,23 @@ class UI:
         self.screen.blit(s, rect.topleft)
 
     # ---------------------------------------------------------------- preview
-    def preview(self, frame, size):
+    def preview(self, frame, size, rect=None):
+        """Camera picture into rect (default: the whole screen)."""
+        rect = rect or self.screen.get_rect()
+        if rect.size != (self.W, self.H) or frame is None:
+            self.screen.fill((0, 0, 0) if frame is not None else (14, 14, 16))
         if frame is None:
-            self.screen.fill((14, 14, 16))
             return
         img = pygame.image.frombuffer(frame, size, "RGB")
-        if size != (self.W, self.H):
-            img = pygame.transform.scale(img, (self.W, self.H))
-        self.screen.blit(img, (0, 0))
+        if size != rect.size:
+            img = pygame.transform.scale(img, rect.size)
+        self.screen.blit(img, rect.topleft)
 
     # ------------------------------------------------------------------- idle
     def button_centre(self):
-        r = self.H * 0.075
-        text_h = self.H * 0.045
-        cy = self.H - self.sb - self.H * 0.045 - text_h - self.H * 0.025 - r
+        r = self.S * 0.075
+        text_h = self.S * 0.045
+        cy = self.H - self.sb - self.S * 0.045 - text_h - self.S * 0.025 - r
         return (self.W / 2, cy), r
 
     def idle(self, t, pressed):
@@ -169,12 +173,12 @@ class UI:
         self.disc(RED, (cx, cy), rr, alpha=255 if pressed else 215)
         self.disc((255, 120, 120), (cx - rr * 0.25, cy - rr * 0.3), rr * 0.35, alpha=45)
         self.ring(WHITE, (cx, cy), rr + self.px(3), self.px(4), alpha=225)
-        self.blit_text(self.cfg["idle_text"], self.H * 0.06, WHITE,
-                       midtop=(cx, cy + r + self.H * 0.03))
+        self.blit_text(self.cfg["idle_text"], self.S * 0.06, WHITE,
+                       midtop=(cx, cy + r + self.S * 0.03))
 
     def hold(self, progress):
         c = (self.W / 2, self.H / 2 - self.sb / 2)
-        r = self.H * 0.17
+        r = self.S * 0.17
         self.disc((0, 0, 0), c, r * 1.12, alpha=170)
         self.ring(WHITE, c, r, self.px(10), alpha=55)
         self.ring(WHITE, c, r, self.px(10), alpha=240, end=360 * max(0.0, min(1.0, progress)))
@@ -191,7 +195,7 @@ class UI:
     # -------------------------------------------------------------- countdown
     def countdown(self, number, frac):
         c = (self.W / 2, self.H / 2 - self.sb / 2)
-        R = self.H * 0.30
+        R = self.S * 0.30
         self.disc((0, 0, 0), c, R * 1.04, alpha=120)
         self.pie(WHITE, c, R * 0.96, frac, alpha=60)
         for a in (0, 90):            # cross hairs, like a film leader
@@ -204,11 +208,11 @@ class UI:
         self.ring(WHITE, c, R, self.px(6), alpha=235)
         self.ring(WHITE, c, R * 0.82, self.px(2), alpha=120)
         pop = 1 + 0.45 * (1 - ease_out(frac / 0.28))
-        base = self.text(str(number), self.H * 0.44)
+        base = self.text(str(number), self.S * 0.44)
         size = (int(base.get_width() * pop), int(base.get_height() * pop))
         num = pygame.transform.smoothscale(base, size)
         num.set_alpha(int(255 * ease_out(frac / 0.15)))
-        rect = num.get_rect(center=(int(c[0]), int(c[1] + self.H * 0.012)))
+        rect = num.get_rect(center=(int(c[0]), int(c[1] + self.S * 0.012)))
         self.screen.blit(num, rect)
 
     # -------------------------------------------------------------- clapper
@@ -216,7 +220,7 @@ class UI:
     CLAP_END = 1.6
 
     def _build_clapper(self):
-        H = self.H
+        H = self.S
         self.bw, self.bh, self.sh = int(H * 0.46), int(H * 0.29), int(H * 0.075)
         bw, bh, sh = self.bw, self.bh, self.sh
         border = max(2, int(H * 0.006))
@@ -259,7 +263,7 @@ class UI:
             t = 0.30 if t < 0.30 + lead else t - lead
         if t > self.CLAP_END:
             return False
-        H = self.H
+        H = self.S
         canvas = pygame.Surface((self.cw, self.ch), pygame.SRCALPHA)
         sx = (self.cw - self.bw) // 2
         rise = ease_out(t / 0.3)
@@ -304,14 +308,14 @@ class UI:
     def recording(self, elapsed, remaining, t):
         m, s = divmod(int(elapsed), 60)
         txt = f"{m}:{s:02d}"
-        size = self.H * 0.068
+        size = self.S * 0.068
         colour = AMBER if remaining < 30 else WHITE
         label = self.text(txt, size, colour)
-        r = self.H * 0.021
-        pad = self.H * 0.022
+        r = self.S * 0.021
+        pad = self.S * 0.022
         h = int(max(label.get_height(), 2 * r) + pad * 1.1)
         w = int(pad + 2 * r + pad * 0.8 + label.get_width() + pad)
-        rect = pygame.Rect(int(self.H * 0.03), int(self.H * 0.03), w, h)
+        rect = pygame.Rect(int(self.S * 0.03), int(self.S * 0.03), w, h)
         self.rrect((0, 0, 0), rect, 120, h / 2)
         if (t % 1.0) < 0.6:
             self.disc((255, 40, 40), (rect.x + pad + r, rect.centery), r)
@@ -321,7 +325,7 @@ class UI:
     # ---------------------------------------------------------------- saving
     def saving(self, t):
         c = (self.W / 2, self.H / 2 - self.sb / 2)
-        r = self.H * 0.085
+        r = self.S * 0.085
         self.disc((0, 0, 0), c, r * 1.25, alpha=150)
         a = (t * 300) % 360
         self.ring(WHITE, c, r, self.px(7), alpha=60)
@@ -329,7 +333,7 @@ class UI:
 
     def saved(self, ok, t):
         c = (self.W / 2, self.H / 2 - self.sb / 2)
-        r = self.H * 0.09 * (0.6 + 0.4 * ease_out(t / 0.18))
+        r = self.S * 0.09 * (0.6 + 0.4 * ease_out(t / 0.18))
         self.disc((0, 0, 0), (c[0], c[1] + self.px(3)), r * 1.05, alpha=90)
         self.disc(GREEN if ok else RED, c, r)
         w = max(3, int(r * 0.16))
@@ -371,7 +375,7 @@ class UI:
             self.rrect((255, 255, 255), pygame.Rect(W // 2 - w // 2, cy - th // 2, w, th), 255, 0)
         elif t < self.TV_OFF:
             p = (t - 0.45) / (self.TV_OFF - 0.45)
-            r = self.H * 0.012 * (1 - 0.5 * p)
+            r = self.S * 0.012 * (1 - 0.5 * p)
             self.disc(WHITE, (W / 2, cy), r * 4, alpha=110 * (1 - p))
             self.disc(WHITE, (W / 2, cy), r, alpha=255 * (1 - p))
 
@@ -391,9 +395,9 @@ class UI:
         self.screen.fill((0, 0, 0))
         W, H = self.W, self.H
         colour = WHITE if ok is not False else (255, 90, 90)
-        title_rect = self.blit_text(title, H * 0.095, colour, shadow=False,
+        title_rect = self.blit_text(title, self.S * 0.095, colour, shadow=False,
                                     center=(W / 2, H * 0.34))
-        bw, bh = int(min(W * 0.62, H * 1.1)), max(10, int(H * 0.045))
+        bw, bh = int(min(W * (0.62 if W > H else 0.82), self.S * 1.1)), max(10, int(self.S * 0.045))
         bar = pygame.Rect(0, 0, bw, bh)
         bar.center = (W // 2, int(H * 0.5))
         pygame.draw.rect(self.screen, (90, 90, 90), bar, max(2, self.px(2)), border_radius=bh // 2)
@@ -412,11 +416,11 @@ class UI:
         if hint:
             hy = H * 0.68
             hc = (170, 170, 170) if hold is None else (255, 110, 110)
-            r = self.blit_text(hint, H * 0.05, hc, shadow=False, center=(W / 2, hy))
+            r = self.blit_text(hint, self.S * 0.05, hc, shadow=False, center=(W / 2, hy))
             if hold is not None:
-                c = (r.left - H * 0.055, hy)
-                self.ring((255, 80, 80), c, H * 0.032, self.px(5), alpha=70)
-                self.ring((255, 80, 80), c, H * 0.032, self.px(5), alpha=255, end=360 * hold)
+                c = (r.left - self.S * 0.055, hy)
+                self.ring((255, 80, 80), c, self.S * 0.032, self.px(5), alpha=70)
+                self.ring((255, 80, 80), c, self.S * 0.032, self.px(5), alpha=255, end=360 * hold)
         return title_rect
 
     def check_mark(self, c, size, colour):
@@ -451,25 +455,25 @@ class UI:
         self.screen.fill((0, 0, 0))
         c = (self.W / 2, self.H * 0.38)
         pulse = 0.5 + 0.5 * math.sin(t * 9)
-        r = self.H * 0.15
+        r = self.S * 0.15
         self.disc((200, 30, 30), c, r, alpha=150 + 90 * pulse)
         self.ring(WHITE, c, r * 1.12, self.px(5), alpha=80)
         self.ring(WHITE, c, r * 1.12, self.px(5), alpha=230, end=360 * max(0.0, left))
         self.trash_icon(c, r * 1.05, WHITE)
-        self.blit_text(text, self.H * 0.075, WHITE, shadow=False, center=(self.W / 2, self.H * 0.7))
+        self.blit_text(text, self.S * 0.075, WHITE, shadow=False, center=(self.W / 2, self.H * 0.7))
 
     def deleted(self, text):
         self.screen.fill((0, 0, 0))
-        self.trash_icon((self.W / 2, self.H * 0.38), self.H * 0.2, (160, 160, 160))
-        self.blit_text(text, self.H * 0.075, (200, 200, 200), shadow=False,
+        self.trash_icon((self.W / 2, self.H * 0.38), self.S * 0.2, (160, 160, 160))
+        self.blit_text(text, self.S * 0.075, (200, 200, 200), shadow=False,
                        center=(self.W / 2, self.H * 0.68))
 
     def starting(self, t):
         self.screen.fill((0, 0, 0))
         c = (self.W / 2, self.H / 2)
         a = (t * 300) % 360
-        self.ring(WHITE, c, self.H * 0.06, self.px(6), alpha=50)
-        self.ring(WHITE, c, self.H * 0.06, self.px(6), alpha=220, start=a, end=a + 100)
+        self.ring(WHITE, c, self.S * 0.06, self.px(6), alpha=50)
+        self.ring(WHITE, c, self.S * 0.06, self.px(6), alpha=220, start=a, end=a + 100)
 
     # ------------------------------------------------------------ status bar
     def drive_icon(self, x, cy, h, colour, kind):
@@ -556,7 +560,7 @@ class UI:
         self.screen.fill((16, 16, 18))
         c = (self.W / 2, self.H / 2 - self.sb / 2)
         a = int(140 + 80 * math.sin(t * 2.5))
-        bw, bh = self.H * 0.26, self.H * 0.17
+        bw, bh = self.S * 0.26, self.S * 0.17
         body = pygame.Rect(0, 0, int(bw), int(bh))
         body.center = (int(c[0]), int(c[1]))
         bump = pygame.Rect(0, 0, int(bw * 0.3), int(bh * 0.22))
@@ -573,8 +577,8 @@ class UI:
         if stage == "off":
             return
         c = (self.W / 2, self.H * 0.38)
-        self.power_icon(c, self.H * 0.09, WHITE, alpha=200)
-        h = int(self.H * 0.07)
+        self.power_icon(c, self.S * 0.09, WHITE, alpha=200)
+        h = int(self.S * 0.07)
         y = int(self.H * 0.66)
         w = int(h * 1.55)
         x0 = int(self.W / 2 - (w + h * 1.6) / 2)

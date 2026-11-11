@@ -93,6 +93,19 @@ Files are **MP4 (H.264 video + AAC sound)**, the same kind an iPhone records, so
 QuickTime, Photos, iMovie, on iPhones (AirDrop, Files) and in every editor. Each file is named
 with just the date and time it was recorded, e.g. `2026-11-11_21-04-33.mp4`.
 
+**Portrait or landscape:** web page → Camera → Orientation. Portrait makes upright, phone-shaped
+videos (e.g. 1080×1920) and turns the booth screen too:
+
+- Turn the **webcam on its side** for full resolution. "Portrait: camera picture" says which way
+  to turn its picture (right/left). If the video comes out upside down, pick the other one. Not
+  turning the camera works too ("Camera not turned"); then the middle of its picture is used, at
+  a lower resolution (e.g. 606×1080 from a 1080p webcam).
+- Turn the **screen on its side** too, and set "Portrait: booth screen" the same way. A screen left
+  landscape ("Screen not turned") shows the portrait picture in the middle with black at the sides.
+- The booth restarts to switch (the web page shows a **Restart now** button) and re-tests which
+  resolution the Pi can record turned. The live view on the web page is shown the same way up as
+  the recording.
+
 **Resolution:** the booth asks the webcam what it can do and uses its highest resolution, as long
 as this Pi can record it smoothly. The Pi 3B+'s hardware video encoder goes up to 1080p, so a 4K
 webcam records at 1920×1080. At first start each size is test-encoded for a few seconds (with the
@@ -117,6 +130,8 @@ on your home network. It works with no internet. Tabs:
   on both drives, videos and background checks. Problems (drive faults, a weak power supply, the
   booth's clock being wrong) show at the top.
 - **Camera:** the live view with everything to set it up:
+  - orientation: landscape or portrait (videos and booth screen), and which way the camera and
+    screen are turned,
   - recording resolution and frame rate (restarts the booth to re-test them),
   - date/time on the video (on/off, corner, format, size),
   - longest recording, sound/picture sync,

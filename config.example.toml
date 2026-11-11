@@ -15,6 +15,9 @@
 # max_video_size = "1920x1080" # the Pi 3B+'s hardware H.264 encoder limit
 # video_bitrate = "auto"       # e.g. "8M"
 # mirror_preview = true        # the screen is a mirror; recordings are never flipped
+# orientation = "landscape"    # or "portrait" (videos and the booth screen)
+# picture_rotation = "right"   # portrait, camera on its side: "right"/"left"; "crop" = not turned
+# screen_rotation = "right"    # portrait, screen on its side: "right"/"left"; "none" = not turned
 
 # Stop light flicker: 1 = 50 Hz mains (Australia, UK, Europe), 2 = 60 Hz (USA)
 # v4l2_controls = { power_line_frequency = 1 }

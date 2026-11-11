@@ -42,14 +42,33 @@ class App:
         os.makedirs(self.log_dir, exist_ok=True)
 
         if cfg["fullscreen"]:
-            self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+            self.display = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         else:
-            self.screen = pygame.display.set_mode(size_tuple(cfg["window_size"]))
+            self.display = pygame.display.set_mode(size_tuple(cfg["window_size"]))
         pygame.display.set_caption("Confession Booth")
         pygame.mouse.set_visible(False)
+        DW, DH = self.display.get_size()
+        portrait = video.portrait(cfg)
+        # orientation in use until the next restart (for the web page)
+        self.layout = {k: cfg[k] for k in ("orientation", "picture_rotation", "screen_rotation")}
+        # Portrait with the screen on its side: draw on an upright canvas and
+        # turn it onto the display every frame.
+        self.screen_turn = cfg["screen_rotation"] if portrait and \
+            cfg["screen_rotation"] in ("right", "left") and DW > DH else None
+        self.screen = pygame.Surface((DH, DW)).convert() if self.screen_turn else self.display
         W, H = self.screen.get_size()
-        log.info("screen %dx%d", W, H)
-        self.preview_size = (W, H) if W <= 1024 else (W // 2 // 2 * 2, H // 2 // 2 * 2)
+        # Where the camera picture goes: everywhere, or a portrait strip in the
+        # middle of a landscape screen.
+        self.preview_rect = pygame.Rect(0, 0, W, H)
+        if portrait and W > H:
+            pw = int(H * 9 / 16) // 2 * 2
+            self.preview_rect = pygame.Rect((W - pw) // 2, 0, pw, H)
+        pw, ph = self.preview_rect.size
+        if max(pw, ph) > 1024:
+            pw, ph = pw // 4 * 2, ph // 4 * 2
+        self.preview_size = (pw // 2 * 2, ph // 2 * 2)
+        log.info("screen %dx%d, %s%s", DW, DH, cfg["orientation"],
+                 f" (screen turned {self.screen_turn})" if self.screen_turn else "")
 
         self.ui = UI(self.screen, cfg)
         self.button = Button(cfg)
@@ -108,6 +127,12 @@ class App:
         self._update(now)
         self._draw(now)
         self._led(now)
+        self._present()
+
+    def _present(self):
+        if self.screen_turn:
+            turned = pygame.transform.rotate(self.screen, -90 if self.screen_turn == "right" else 90)
+            self.display.blit(turned, (0, 0))
 
     def set_state(self, s):
         log.debug("state %s -> %s", self.state, s)
@@ -247,8 +272,8 @@ class App:
         _, frame = self.camera.latest()
         if frame is None:
             return None
-        img = pygame.image.frombuffer(frame, self.preview_size, "RGB")
-        return pygame.transform.scale(img, self.screen.get_size()).convert()
+        self.ui.preview(frame, self.preview_size, self.preview_rect)
+        return self.screen.copy()
 
     def _finish(self, rec):
         ok = False
@@ -446,7 +471,7 @@ class App:
             self.ui.no_camera(now)
         else:
             _, frame = self.camera.latest()
-            self.ui.preview(frame, self.preview_size)
+            self.ui.preview(frame, self.preview_size, self.preview_rect)
 
     def _draw_saving(self, now, fade_in):
         cfg = self.cfg

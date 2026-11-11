@@ -110,6 +110,22 @@ def test_saved_settings_override():
     assert cfg["led_pin"] != 5                # only web-editable keys come from settings.json
 
 
+def test_portrait_sizes_and_filters():
+    cfg = config.load(overrides={"settings_file": "/nonexistent"})
+    assert video.output_size(cfg, 1920, 1080) == (1920, 1080) and video.orient_filters(cfg) == []
+    cfg["orientation"] = "portrait"
+    assert video.output_size(cfg, 1920, 1080) == (1080, 1920)
+    assert video.orient_filters(cfg) == ["transpose=clock"]
+    cfg["picture_rotation"] = "left"
+    assert video.orient_filters(cfg) == ["transpose=cclock"]
+    cfg["picture_rotation"] = "crop"
+    assert video.output_size(cfg, 1920, 1080) == (606, 1080)      # even width, 9:16
+    with tempfile.TemporaryDirectory() as tmp:
+        f = video.video_filter(dict(cfg, timestamp=True), 1920, 1080, tmp)
+    # turned/cropped first, so the date/time is upright and inside the picture
+    assert f.index("crop=") < f.index("drawtext") and f.startswith("format=yuv420p")
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):

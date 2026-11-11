@@ -14,6 +14,15 @@ TS_FORMATS = ["%d/%m/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %I:%M %p",
 
 FIELDS = [
     # --- recording / camera
+    dict(key="orientation", group="Recording", label="Orientation", type="select",
+         options=["landscape", "portrait"], apply="restart",
+         help="Changes the videos and the booth screen"),
+    dict(key="picture_rotation", group="Recording", label="Portrait: camera picture",
+         type="select", options=["right", "left", "crop"], apply="restart",
+         help="Camera on its side: turn right or left (swap if upside down)"),
+    dict(key="screen_rotation", group="Recording", label="Portrait: booth screen",
+         type="select", options=["right", "left", "none"], apply="restart",
+         help="Screen on its side: turn right or left (swap if upside down)"),
     dict(key="video_size", group="Recording", label="Resolution", type="resolution",
          apply="restart", help="Best available = the biggest size this Pi records smoothly"),
     dict(key="framerate", group="Recording", label="Frame rate", type="select", apply="restart",

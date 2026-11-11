@@ -14,7 +14,7 @@ import subprocess
 import threading
 import time
 
-from . import devices
+from . import devices, video
 
 log = logging.getLogger("booth.camera")
 
@@ -83,9 +83,13 @@ class Camera:
                     "-framerate", f"{fps:g}", "-i", self.device]
             out_a = ["-c:v", "copy"] if fmt == "mjpeg" else ["-c:v", "mjpeg", "-q:v", "4"]
         cmd += ["-map", "0:v"] + out_a + ["-f", "mpjpeg", "pipe:1"]
+        # Fill the preview area (cropping the edges), upright for portrait. A
+        # camera on its side is turned after shrinking, which costs very little.
+        turn = [f for f in video.orient_filters(cfg) if f.startswith("transpose")]
+        pw, ph = (self.ph, self.pw) if turn else (self.pw, self.ph)
         vf = [f"fps={cfg['preview_fps']}",
-              f"scale={self.pw}:{self.ph}:force_original_aspect_ratio=increase:flags=fast_bilinear",
-              f"crop={self.pw}:{self.ph}"]
+              f"scale={pw}:{ph}:force_original_aspect_ratio=increase:flags=fast_bilinear",
+              f"crop={pw}:{ph}"] + turn
         if cfg["mirror_preview"]:
             vf.append("hflip")
         cmd += ["-map", "0:v", "-vf", ",".join(vf), "-pix_fmt", "rgb24",

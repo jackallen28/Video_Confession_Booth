@@ -41,6 +41,16 @@ DEFAULTS = {
     "preview_lowres": "auto",
     "preview_fps": 15,
     "mirror_preview": True,
+    # "landscape" or "portrait" (recordings and the booth screen).
+    "orientation": "landscape",
+    # Portrait: how to get an upright picture from the camera. "right"/"left" =
+    # the camera is mounted on its side, turn its picture 90 degrees that way
+    # (full resolution); "crop" = the camera is not turned, use the middle.
+    "picture_rotation": "right",
+    # Portrait: the booth screen is mounted on its side, turn what's drawn 90
+    # degrees "right" or "left"; "none" = screen not turned (portrait picture
+    # in the middle of the landscape screen).
+    "screen_rotation": "right",
 
     # --- Audio ------------------------------------------------------------
     # "auto" = first USB microphone (the webcam's own mic), "none", "test",

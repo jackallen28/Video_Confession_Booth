@@ -30,7 +30,7 @@ import time
 import urllib.parse
 import zipfile
 
-from . import config, devices, media, settings
+from . import config, devices, media, settings, video
 
 log = logging.getLogger("booth.web")
 
@@ -112,6 +112,11 @@ class Web:
             "clock": time.time(),
             "clock_text": datetime.datetime.now().strftime("%a %d %b %Y %H:%M:%S"),
             "restart_needed": app.restart_needed,
+            # what's in use now (settings may differ until the restart)
+            "orientation": app.layout["orientation"],
+            "picture_rotation": app.layout["picture_rotation"],
+            "video_size": "×".join(map(str, video.output_size(app.layout, app.mode["w"],
+                                                              app.mode["h"]))) if app.mode else None,
             "wifi": self._wifi(),
         }
 

@@ -53,9 +53,35 @@ def _filter_escape(path):
 TS_SIZES = {"small": 40, "medium": 30, "large": 22}      # picture height / n
 
 
+def portrait(cfg):
+    return cfg.get("orientation") == "portrait"
+
+
+def orient_filters(cfg):
+    """Turns the camera picture upright for portrait recordings."""
+    if not portrait(cfg):
+        return []
+    rot = cfg.get("picture_rotation", "right")
+    if rot == "right":
+        return ["transpose=clock"]
+    if rot == "left":
+        return ["transpose=cclock"]
+    return ["crop=trunc(ih*9/16/2)*2:ih"]          # camera not turned: the middle
+
+
+def output_size(cfg, w, h):
+    """Size of the recorded video for a camera mode of w x h."""
+    if not portrait(cfg):
+        return w, h
+    if cfg.get("picture_rotation", "right") in ("right", "left"):
+        return h, w
+    return (h * 9 // 16) // 2 * 2, h
+
+
 def video_filter(cfg, w, h, workdir):
-    """Filters for the recording: optional date/time in a corner, then 4:2:0."""
-    parts = []
+    """Filters for the recording: 4:2:0, upright for portrait, optional date/time."""
+    parts = ["format=yuv420p"] + orient_filters(cfg)
+    w, h = output_size(cfg, w, h)
     if cfg["timestamp"]:
         # The text goes in a file so no shell/filter escaping can break it.
         fmt = str(cfg["timestamp_format"]).replace("\\", "").replace(":", "\\:")
@@ -63,8 +89,9 @@ def video_filter(cfg, w, h, workdir):
         os.makedirs(workdir, exist_ok=True)
         with open(textfile, "w") as f:
             f.write("%{localtime:" + fmt + "}")
-        size = max(12, int(h / TS_SIZES.get(cfg["timestamp_size"], 30)))
-        m = max(6, int(h / 40))
+        short = min(w, h)
+        size = max(12, int(short / TS_SIZES.get(cfg["timestamp_size"], 30)))
+        m = max(6, int(short / 40))
         corner = cfg["timestamp_corner"]
         x = f"{m}" if "left" in corner else f"w-tw-{m}"
         y = f"{m}" if "top" in corner else f"h-th-{m}"
@@ -74,7 +101,6 @@ def video_filter(cfg, w, h, workdir):
         if os.path.exists(FONT):
             opts.insert(1, f"fontfile={_filter_escape(FONT)}")
         parts.append("drawtext=" + ":".join(opts))
-    parts.append("format=yuv420p")
     return ",".join(parts)
 
 
@@ -123,7 +149,8 @@ def choose(cfg, dev, workdir, progress=None):
 
     key = hashlib.sha1(json.dumps([devices.camera_name(dev), cands, encoders, cfg["timestamp"],
                                    cfg["timestamp_size"], str(cfg["video_bitrate"]),
-                                   cfg["audio_bitrate"]], sort_keys=True).encode()).hexdigest()
+                                   cfg["audio_bitrate"], cfg["orientation"],
+                                   cfg["picture_rotation"]], sort_keys=True).encode()).hexdigest()
     cache_path = os.path.join(workdir, "video-check.json")
     try:
         with open(cache_path) as f:
