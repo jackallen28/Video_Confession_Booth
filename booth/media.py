@@ -96,8 +96,9 @@ def probe(path, timeout=30):
             "duration": round(dur, 2), "video": "video" in kinds, "audio": "audio" in kinds}
 
 
-def _read_chunks(path, throttle=None, abort=None):
-    drop_cache(path)
+def _read_chunks(path, throttle=None, abort=None, drop=True):
+    if drop:
+        drop_cache(path)
     with open(path, "rb") as f:
         while True:
             if abort is not None and abort.is_set():
@@ -123,35 +124,26 @@ def sha256_file(path, throttle=None, abort=None):
 
 
 def check_copy(path, throttle=None, abort=None):
-    """Reads the file from the drive once: SHA-256 of the bytes, and every
-    audio/video packet run through ffmpeg's demuxer to get a hash of the
-    content (equal for two good copies even if the container bytes differ)."""
+    """Reads the file back from the drive: SHA-256 of the bytes, and every
+    audio/video packet run through ffmpeg's demuxer for a hash of the content
+    (two good copies have the same content hash)."""
+    drop_cache(path)
     err = tempfile.TemporaryFile()
     proc = subprocess.Popen(low_priority() + [
-        "ffmpeg", "-v", "error", "-nostdin", "-f", "matroska", "-i", "pipe:0",
+        "ffmpeg", "-v", "error", "-nostdin", "-i", path,
         "-map", "0", "-c", "copy", "-f", "hash", "-hash", "sha256", "-"],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=err)
-    h = hashlib.sha256()
-    size = 0
+        stdout=subprocess.PIPE, stderr=err)
     try:
-        for b in _read_chunks(path, throttle, abort):
+        h = hashlib.sha256()
+        size = 0
+        for b in _read_chunks(path, throttle, abort, drop=False):
             h.update(b)
             size += len(b)
-            try:
-                proc.stdin.write(b)
-            except BrokenPipeError:
-                pass          # ffmpeg gave up; keep hashing, report below
+        out = proc.communicate(timeout=600)[0].decode(errors="replace")
     except BaseException:
         proc.kill()
         proc.wait()
         raise
-    finally:
-        try:
-            proc.stdin.close()
-        except OSError:
-            pass
-    out = proc.stdout.read().decode(errors="replace")
-    proc.wait()
     err.seek(0)
     errors = [l for l in err.read().decode(errors="replace").splitlines() if l.strip()]
     m = re.search(r"SHA256=([0-9a-f]{64})", out)
@@ -159,6 +151,28 @@ def check_copy(path, throttle=None, abort=None):
             "content": m.group(1) if m else None,
             "demux_errors": len(errors), "demux_ok": proc.returncode == 0 and m is not None,
             "error_sample": errors[:3]}
+
+
+def remux_to_mp4(src, dst, timeout=900):
+    """Recording (MPEG-TS) -> standard MP4 (H.264 + AAC) that plays on
+    iPhone/Mac. No re-encoding. Written via dst.tmp, fsynced, then renamed."""
+    tmp = dst + ".tmp"
+    try:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-y", "-i", src,
+                            "-map", "0:v?", "-map", "0:a?", "-c", "copy",
+                            "-f", "mp4", tmp], capture_output=True, timeout=timeout)
+        if r.returncode != 0:
+            raise OSError(r.stderr.decode(errors="replace").strip()[-300:] or "ffmpeg failed")
+        fsync_file(tmp)
+        os.replace(tmp, dst)
+        fsync_dir(os.path.dirname(dst))
+        return True, ""
+    except (OSError, subprocess.SubprocessError) as e:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return False, str(e)
 
 
 def decode_check(path, timeout=3600):

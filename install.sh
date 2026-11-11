@@ -19,7 +19,7 @@ APP=/opt/confession-booth
 echo "== Installing packages (takes a few minutes)"
 apt-get update
 apt-get install -y ffmpeg python3-pygame python3-gpiozero v4l-utils alsa-utils \
-                   exfatprogs util-linux
+                   exfatprogs util-linux fonts-dejavu-core
 for pkg in python3-lgpio smartmontools ntfs-3g; do
   apt-get install -y "$pkg" || echo "   (optional package $pkg not installed, carrying on)"
 done
@@ -36,6 +36,11 @@ if [[ ! -f /etc/confession-booth/config.toml ]]; then
   cp "$HERE/config.example.toml" /etc/confession-booth/config.toml
   echo "   settings: /etc/confession-booth/config.toml"
 fi
+
+# Camera settings over SSH: sudo booth-camera
+printf '#!/bin/sh\ncd /opt/confession-booth && exec python3 -m booth.camera_setup "$@"\n' \
+  > /usr/local/bin/booth-camera
+chmod 755 /usr/local/bin/booth-camera
 
 echo "== Starting the booth at power-on"
 install -m 644 "$HERE/systemd/confession-booth.service" /etc/systemd/system/
@@ -56,4 +61,5 @@ fi
 
 echo
 echo "Done. Plug in the webcam, SSD, screen and button, then:  sudo reboot"
+echo "Camera settings (over SSH):  sudo booth-camera"
 echo "Live log:  journalctl -u confession-booth -f"

@@ -31,7 +31,8 @@ from . import media
 
 log = logging.getLogger("booth.storage")
 
-NAME_RE = re.compile(r"^booth_(\d+)_[\d-]+\.mkv$")
+VIDEO_EXT = ".mp4"
+PART_EXT = ".ts.part"       # while recording (MPEG-TS, survives power cuts)
 
 
 # --------------------------------------------------------------------- manifest
@@ -39,7 +40,7 @@ class Manifest:
     def __init__(self, path):
         self.path = path
         self.lock = threading.RLock()
-        self.data = {"version": 1, "next_seq": 1, "recordings": {}}
+        self.data = {"version": 2, "recordings": {}}
         try:
             with open(path) as f:
                 self.data = json.load(f)
@@ -63,12 +64,6 @@ class Manifest:
                     time.sleep(0.01)
             media.write_atomic(self.path, blob)
 
-    def new_name(self, seen_seq=0):
-        with self.lock:
-            seq = max(self.data.get("next_seq", 1), seen_seq + 1)
-            self.data["next_seq"] = seq + 1
-            self.save()
-        return f"booth_{seq:04d}_{time.strftime('%Y%m%d-%H%M%S')}.mkv"
 
     def entry(self, name, create=False):
         with self.lock:
@@ -78,8 +73,10 @@ class Manifest:
             return e
 
     def names(self):
+        """Recordings that still exist (not deleted by a guest)."""
         with self.lock:
-            return sorted(self.data["recordings"])
+            return sorted(n for n, e in self.data["recordings"].items()
+                          if e.get("state") != "deleted")
 
 
 # ------------------------------------------------------------------------ drives
@@ -222,6 +219,7 @@ class Storage:
         self.low_free = int(cfg["low_free_mb"]) * 1_000_000
         self.recording = threading.Event()   # set by the app while recording
         self.active_name = None
+        self.held = set()            # recordings waiting for the guest's keep/delete
         self._q = queue.Queue()
         self._pending = set()
         self._plock = threading.Lock()
@@ -268,45 +266,102 @@ class Storage:
             return {d.name: d for d in self.drives if d.usable(self.min_free)}
 
     def new_name(self):
-        seen = 0
-        for d in self.drives:
-            if d.present:
-                for f in self._listdir(d):
-                    m = NAME_RE.match(f.replace(".part", ""))
-                    if m:
-                        seen = max(seen, int(m.group(1)))
-        return self.manifest.new_name(seen)
+        """Just the date and time, e.g. 2026-11-11_21-04-33.mp4 (a _2 is added
+        in the rare case that name is taken, e.g. after the clock was reset)."""
+        base = time.strftime("%Y-%m-%d_%H-%M-%S")
+        n = 1
+        while True:
+            name = base + (f"_{n}" if n > 1 else "") + VIDEO_EXT
+            stem = name[:-len(VIDEO_EXT)]
+            taken = self.manifest.entry(name) is not None or any(
+                os.path.exists(d.path(name)) or os.path.exists(d.path(stem + PART_EXT))
+                for d in self.drives if d.present)
+            if not taken:
+                return name
+            n += 1
+
+    @staticmethod
+    def part_name(name):
+        return name[:-len(VIDEO_EXT)] + PART_EXT
 
     def finalize(self, result):
-        """Called when ffmpeg has finished: rename the .part files, quick check.
-        Returns True if at least one copy plays."""
+        """Called when ffmpeg has finished: turn each recorded copy into a normal
+        .mp4 and check it plays. Returns True if at least one copy plays.
+        The full background check starts with accept() (after the guest had
+        the chance to delete it)."""
         name = result["name"]
-        ok = False
-        for drive_name, final in result["targets"].items():
-            part = final + ".part"
-            if not os.path.exists(part):
+        outcome = {}
+
+        def one(drive_name, part):
+            final = part[:-len(PART_EXT)] + VIDEO_EXT
+            if not os.path.exists(part) or os.path.getsize(part) == 0:
                 log.error("%s: no file on %s", name, drive_name)
-                continue
+                return
             try:
                 media.fsync_file(part)
-                os.replace(part, final)
-                media.fsync_dir(os.path.dirname(final))
             except OSError as e:
-                log.error("%s: finishing copy on %s failed: %s", name, drive_name, e)
-                continue
+                log.error("%s: %s copy unreadable: %s", name, drive_name, e)
+                return
+            ok, why = media.remux_to_mp4(part, final)
             if not ok:
-                p = media.probe(final)
-                ok = p["ok"]
-                log.info("%s on %s: %s", name, drive_name, p)
+                log.error("%s: MP4 on %s failed (%s); keeping the raw .ts", name, drive_name, why)
+                try:
+                    os.replace(part, part[:-len(".part")])
+                except OSError:
+                    pass
+                return
+            p = media.probe(final)
+            log.info("%s on %s: %s", name, drive_name, p)
+            outcome[drive_name] = p["ok"]
+            if p["ok"]:
+                try:
+                    os.remove(part)
+                except OSError:
+                    pass
+
+        self.held.add(name)
+        threads = [threading.Thread(target=one, args=(k, v)) for k, v in result["parts"].items()]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
         with self.manifest.lock:
             e = self.manifest.entry(name, create=True)
             e.update({"created": time.strftime("%Y-%m-%d %H:%M:%S"),
                       "seconds": round(result["duration"], 1),
                       "frames": result["frames"], "dropped_frames": result["dropped"],
-                      "recorded_to": sorted(result["targets"]), "state": "checking"})
+                      "recorded_to": sorted(result["parts"]), "state": "review"})
             self.manifest.save()
+        return any(outcome.values())
+
+    def accept(self, name):
+        """Guest kept it: start the full check / mirroring."""
+        self.held.discard(name)
         self.queue(name)
-        return ok
+
+    def delete(self, name):
+        """Guest deleted it: remove every copy from every drive."""
+        stem = name[:-len(VIDEO_EXT)]
+        with self.manifest.lock:
+            e = self.manifest.entry(name, create=True)
+            e["state"] = "deleted"
+            e["deleted"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            e["copies"] = {}
+            self.manifest.save()
+        for d in self.drives:
+            if not d.present:
+                continue
+            for f in (name, stem + PART_EXT, stem + ".ts", name + ".tmp"):
+                try:
+                    os.remove(d.path(f))
+                    log.info("deleted %s from %s", f, d.name)
+                except FileNotFoundError:
+                    pass
+                except OSError as ex:
+                    log.error("could not delete %s on %s: %s", f, d.name, ex)
+            media.fsync_dir(d.video_dir)
+        self.held.discard(name)
+        self._write_sums()
 
     # ---------------------------------------------------------------- health
     def _health_loop(self):
@@ -511,24 +566,32 @@ class Storage:
             if not d.present:
                 continue
             for f in self._listdir(d):
-                full = os.path.join(d.video_dir, f)
-                if f.endswith(".mkv.part"):
-                    name = f[:-5]
-                    if name == self.active_name or self.recording.is_set():
+                if f.endswith(PART_EXT):
+                    name = f[:-len(PART_EXT)] + VIDEO_EXT
+                    e = self.manifest.entry(name)
+                    if name == self.active_name or self.recording.is_set() or \
+                            (e and e.get("state") == "deleted"):
                         continue
-                    final = os.path.join(d.video_dir, name)
-                    p = media.probe(full)
-                    if p["ok"] and not os.path.exists(final):
-                        log.warning("recovered unfinished recording %s on %s", name, d.name)
-                        os.replace(full, final)
-                        e = self.manifest.entry(name, create=True)
-                        e.setdefault("recovered", True)
-                elif f.endswith(".mkv") and not f.startswith("."):
-                    if self.manifest.entry(f) is None:
+                    final = d.path(name)
+                    if not os.path.exists(final):
+                        ok, why = media.remux_to_mp4(d.path(f), final)
+                        if ok and media.probe(final)["ok"]:
+                            log.warning("recovered unfinished recording %s on %s", name, d.name)
+                            os.remove(d.path(f))
+                            self.manifest.entry(name, create=True).setdefault("recovered", True)
+                        else:
+                            log.error("could not recover %s on %s: %s", f, d.name, why)
+                elif f.endswith(VIDEO_EXT) and not f.startswith("."):
+                    e = self.manifest.entry(f)
+                    if e is None:
                         log.info("found %s on %s, adding it", f, d.name)
                         self.manifest.entry(f, create=True)["found_on_drive"] = True
+                    elif e.get("state") == "deleted":
+                        log.warning("%s was deleted by a guest but is on %s; leaving it", f, d.name)
         self.manifest.save()
         for name in self.manifest.names():
+            if name in self.held:
+                continue
             e = self.manifest.entry(name)
             for d in self.drives:
                 c = e["copies"].get(d.name, {})
@@ -570,6 +633,8 @@ class Storage:
         """Verify every copy of one recording and repair/mirror as needed."""
         with self.manifest.lock:
             e = self.manifest.entry(name, create=True)
+        if e.get("state") == "deleted":
+            return
         copies = e.setdefault("copies", {})
         present = [d for d in self.drives if d.present and not d.errors.get("readonly")]
         # checksum each copy had when it was last verified (to spot later changes)
@@ -653,6 +718,8 @@ class Storage:
                     log.error("copy of %s on %s does not match!", name, d.name)
                     copies[d.name] = {"status": "bad", "sha256": digest}
 
+        if e.get("state") == "deleted":
+            return
         verified = [k for k, c in copies.items() if c.get("status") == "verified"]
         expected = [d.name for d in self.drives if d.present]
         if not verified:

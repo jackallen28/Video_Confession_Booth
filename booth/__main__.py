@@ -39,9 +39,10 @@ def main():
 
     from .app import App
     try:
-        App(cfg).run()
+        code = App(cfg).run()
     finally:
         pygame.quit()
+    sys.exit(code)
 
 
 if __name__ == "__main__":

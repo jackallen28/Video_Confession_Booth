@@ -2,17 +2,27 @@
 # install.sh. Remove the # in front of a line to change it, then restart:
 #   sudo systemctl restart confession-booth
 # Every setting and its default is listed in booth/config.py.
+#
+# Camera settings (resolution, timestamp, brightness, exposure...) are easiest
+# to change over SSH with:   sudo booth-camera
+# Those are saved in /etc/confession-booth/camera.json and win over this file.
 
 # --- Camera ---
 # camera = "auto"              # or "/dev/video0"
-# camera_format = "mjpeg"      # "yuyv422" for cameras without MJPEG (use 640x480 then)
-# video_size = "1280x720"      # "1920x1080" if the webcam does MJPEG at 1080p
-# framerate = 30
-# preview_lowres = 1           # 2 for 1080p on a Pi 3B+
+# video_size = "max"           # best the camera + Pi can do, or e.g. "1280x720"
+# framerate = "max"            # or e.g. 25
+# max_video_size = "1920x1080" # the Pi 3B+'s hardware H.264 encoder limit
+# video_bitrate = "auto"       # e.g. "8M"
 # mirror_preview = true        # the screen is a mirror; recordings are never flipped
 
 # Stop light flicker: 1 = 50 Hz mains (Australia, UK, Europe), 2 = 60 Hz (USA)
 # v4l2_controls = { power_line_frequency = 1 }
+
+# --- Timestamp burnt into the video ---
+# timestamp = false
+# timestamp_corner = "bottom-right"   # bottom-left, top-left, top-right
+# timestamp_format = "%d/%m/%Y %H:%M:%S"
+# timestamp_size = "medium"           # small, medium, large
 
 # --- Sound ---
 # audio = "auto"               # webcam mic; "none" for no sound, or "plughw:CARD=C920,DEV=0"
@@ -21,10 +31,17 @@
 # --- Button (BCM numbering): GPIO17 = pin 11, other leg to GND = pin 9 ---
 # button_pin = 17
 # hold_shutdown_seconds = 30
+# The light in the button (through a transistor, see README). -1 = no light.
+# led_pin = 27                 # pin 13
+# led_active_high = true
 
 # --- Recording ---
 # countdown_from = 3
 # max_record_seconds = 300     # stops by itself after 5 minutes
+# black_seconds = 2            # after STOP: TV switch-off, then black for this long
+# saving_min_seconds = 5       # the "VIDEO SAVING" bar takes at least this long
+# delete_hold_seconds = 3      # hold this long on the saving screen to delete...
+# delete_confirm_seconds = 6   # ...then press again within this time
 
 # --- Drives ---
 # sd_dir = "/srv/confessions"
@@ -35,3 +52,9 @@
 # --- Screen text ---
 # idle_text = "PRESS BUTTON TO RECORD"
 # action_text = "ACTION!"
+# saving_text = "VIDEO SAVING"
+# saved_text = "VIDEO SAVED"
+# failed_text = "VIDEO NOT SAVED"
+# delete_hint_text = "HOLD BUTTON 3 SEC TO DELETE"
+# delete_confirm_text = "PRESS AGAIN TO DELETE"
+# deleted_text = "VIDEO DELETED"

@@ -15,18 +15,22 @@ import threading
 import time
 
 from . import devices
-from .config import size_tuple
 
 log = logging.getLogger("booth.camera")
 
 
 class Camera:
-    def __init__(self, cfg, preview_size, log_dir):
+    def __init__(self, cfg, device, mode, preview_size, log_dir):
+        """mode: {"format", "w", "h", "fps"} from video.choose()."""
         self.cfg = cfg
+        self.mode = mode
         self.pw, self.ph = preview_size
         self.log_dir = log_dir
-        self.lowres = int(cfg["preview_lowres"])
-        self.device = None
+        lowres = cfg["preview_lowres"]
+        if lowres == "auto":
+            lowres = 2 if mode["w"] > 1280 else 1 if mode["w"] > 640 else 0
+        self.lowres = int(lowres)
+        self.device = device
         self._proc = None
         self._lock = threading.Lock()
         self._frame = None          # latest preview frame (bytes, RGB)
@@ -65,19 +69,17 @@ class Camera:
     # -------------------------------------------------------------- internal
     def _command(self, preview_fd):
         cfg = self.cfg
-        w, h = size_tuple(cfg["video_size"])
+        w, h, fps, fmt = self.mode["w"], self.mode["h"], self.mode["fps"], self.mode["format"]
         cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning"]
         if self.device == "test":
-            cmd += ["-re", "-f", "lavfi", "-i",
-                    f"testsrc2=size={w}x{h}:rate={cfg['framerate']}"]
+            cmd += ["-re", "-f", "lavfi", "-i", f"testsrc2=size={w}x{h}:rate={fps:g}"]
             out_a = ["-c:v", "mjpeg", "-q:v", "4"]
         else:
-            fmt = cfg["camera_format"]
             if self.lowres and fmt == "mjpeg":
                 cmd += ["-lowres", str(self.lowres)]
             cmd += ["-f", "v4l2", "-thread_queue_size", "64",
                     "-input_format", fmt, "-video_size", f"{w}x{h}",
-                    "-framerate", str(cfg["framerate"]), "-i", self.device]
+                    "-framerate", f"{fps:g}", "-i", self.device]
             out_a = ["-c:v", "copy"] if fmt == "mjpeg" else ["-c:v", "mjpeg", "-q:v", "4"]
         cmd += ["-map", "0:v"] + out_a + ["-f", "mpjpeg", "pipe:1"]
         vf = [f"fps={cfg['preview_fps']}",
@@ -91,10 +93,12 @@ class Camera:
 
     def _supervise(self):
         while not self._stop.is_set():
-            self.device = devices.find_camera(self.cfg["camera"])
-            if not self.device:
-                self._stop.wait(2)
-                continue
+            if self.device != "test" and not os.path.exists(self.device or ""):
+                found = devices.find_camera(self.cfg["camera"])
+                if not found:
+                    self._stop.wait(2)
+                    continue
+                self.device = found
             devices.apply_camera_controls(self.device, self.cfg["v4l2_controls"])
             started = time.monotonic()
             self._run_once()

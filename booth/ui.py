@@ -341,6 +341,132 @@ class UI:
             pygame.draw.line(self.screen, WHITE, (cx - d, cy - d), (cx + d, cy + d), w)
             pygame.draw.line(self.screen, WHITE, (cx - d, cy + d), (cx + d, cy - d), w)
 
+    # ------------------------------------------------------- stop: TV switch-off
+    TV_OFF = 0.85
+
+    def tv_off(self, frozen, t):
+        """Old CRT switching off: picture squashes to a bright line, the line
+        shrinks to a dot, the dot fades. frozen = last camera picture."""
+        self.screen.fill((0, 0, 0))
+        W, H = self.W, self.H
+        cy = H // 2
+        if t < 0.25 and frozen is not None:
+            p = ease_in(t / 0.25)
+            h = max(2, int(H * (1 - p)))
+            img = pygame.transform.scale(frozen, (W, h))
+            glow = pygame.Surface((W, h))
+            glow.fill((255, 255, 255))
+            glow.set_alpha(int(230 * p))
+            img.blit(glow, (0, 0))
+            self.screen.blit(img, (0, cy - h // 2))
+        elif t < 0.45:
+            p = ease_in((t - 0.25) / 0.2)
+            w = max(4, int(W * (1 - p)))
+            th = max(2, self.px(3))
+            self.rrect(WHITE, pygame.Rect(W // 2 - w // 2, cy - th * 2, w, th * 4), 70, th * 2)
+            self.rrect((255, 255, 255), pygame.Rect(W // 2 - w // 2, cy - th // 2, w, th), 255, 0)
+        elif t < self.TV_OFF:
+            p = (t - 0.45) / (self.TV_OFF - 0.45)
+            r = self.H * 0.012 * (1 - 0.5 * p)
+            self.disc(WHITE, (W / 2, cy), r * 4, alpha=110 * (1 - p))
+            self.disc(WHITE, (W / 2, cy), r, alpha=255 * (1 - p))
+
+    # ------------------------------------------------------------ saving screen
+    def fade(self, alpha):
+        """Black over everything; alpha 0..255."""
+        if alpha <= 0:
+            return
+        f = pygame.Surface((self.W, self.H))
+        f.fill((0, 0, 0))
+        f.set_alpha(int(min(255, alpha)))
+        self.screen.blit(f, (0, 0))
+
+    def saving_screen(self, title, progress, hint, hold, ok=None, t=0.0):
+        """title, a loading bar (0..1), the delete hint and the delete-hold ring
+        (hold 0..1, or None). ok: None while saving, True/False when done."""
+        self.screen.fill((0, 0, 0))
+        W, H = self.W, self.H
+        colour = WHITE if ok is not False else (255, 90, 90)
+        title_rect = self.blit_text(title, H * 0.095, colour, shadow=False,
+                                    center=(W / 2, H * 0.34))
+        bw, bh = int(min(W * 0.62, H * 1.1)), max(10, int(H * 0.045))
+        bar = pygame.Rect(0, 0, bw, bh)
+        bar.center = (W // 2, int(H * 0.5))
+        pygame.draw.rect(self.screen, (90, 90, 90), bar, max(2, self.px(2)), border_radius=bh // 2)
+        inner = bar.inflate(-self.px(8), -self.px(8))
+        fill = inner.copy()
+        fill.width = int(inner.width * max(0.0, min(1.0, progress)))
+        if fill.width > 2:
+            fill_colour = GREEN if ok else (255, 90, 90) if ok is False else WHITE
+            pygame.draw.rect(self.screen, fill_colour, fill, border_radius=inner.height // 2)
+            if ok is None:      # moving shine on the bar
+                x = fill.x + (t * 1.2 % 1.0) * fill.width
+                shine = pygame.Rect(int(x), fill.y, max(4, fill.height), fill.height)
+                self.rrect((255, 255, 255), shine.clip(fill), 90, fill.height // 2)
+        if ok:
+            self.check_mark((bar.right + bh * 1.4, bar.centery), bh * 0.9, GREEN)
+        if hint:
+            hy = H * 0.68
+            hc = (170, 170, 170) if hold is None else (255, 110, 110)
+            r = self.blit_text(hint, H * 0.05, hc, shadow=False, center=(W / 2, hy))
+            if hold is not None:
+                c = (r.left - H * 0.055, hy)
+                self.ring((255, 80, 80), c, H * 0.032, self.px(5), alpha=70)
+                self.ring((255, 80, 80), c, H * 0.032, self.px(5), alpha=255, end=360 * hold)
+        return title_rect
+
+    def check_mark(self, c, size, colour):
+        w = max(3, int(size * 0.18))
+        cx, cy = c
+        pts = [(cx - size * 0.45, cy), (cx - size * 0.12, cy + size * 0.33),
+               (cx + size * 0.48, cy - size * 0.35)]
+        pygame.draw.lines(self.screen, colour, False, pts, w)
+        for p in pts:
+            pygame.draw.circle(self.screen, colour, (int(p[0]), int(p[1])), w // 2)
+
+    def trash_icon(self, c, size, colour):
+        cx, cy = c
+        s = size
+        w = max(2, int(s * 0.09))
+        scr = self.screen
+        lid = pygame.Rect(0, 0, int(s * 0.9), w * 2)
+        lid.midbottom = (int(cx), int(cy - s * 0.32))
+        pygame.draw.rect(scr, colour, lid, border_radius=w)
+        handle = pygame.Rect(0, 0, int(s * 0.32), int(s * 0.14) + w)
+        handle.midbottom = (int(cx), lid.top + w)
+        pygame.draw.rect(scr, colour, handle, w, border_radius=w)
+        body = [(cx - s * 0.36, cy - s * 0.27), (cx + s * 0.36, cy - s * 0.27),
+                (cx + s * 0.29, cy + s * 0.5), (cx - s * 0.29, cy + s * 0.5)]
+        pygame.draw.polygon(scr, colour, body, w)
+        for k in (-0.14, 0, 0.14):
+            pygame.draw.line(scr, colour, (cx + s * k, cy - s * 0.13),
+                             (cx + s * k * 0.85, cy + s * 0.37), max(2, w - 1))
+
+    def confirm_delete(self, text, left, t):
+        """left = 1..0, time left to press again."""
+        self.screen.fill((0, 0, 0))
+        c = (self.W / 2, self.H * 0.38)
+        pulse = 0.5 + 0.5 * math.sin(t * 9)
+        r = self.H * 0.15
+        self.disc((200, 30, 30), c, r, alpha=150 + 90 * pulse)
+        self.ring(WHITE, c, r * 1.12, self.px(5), alpha=80)
+        self.ring(WHITE, c, r * 1.12, self.px(5), alpha=230, end=360 * max(0.0, left))
+        self.trash_icon(c, r * 1.05, WHITE)
+        self.blit_text(text, self.H * 0.075, WHITE, shadow=False, center=(self.W / 2, self.H * 0.7))
+
+    def deleted(self, text):
+        self.screen.fill((0, 0, 0))
+        self.trash_icon((self.W / 2, self.H * 0.38), self.H * 0.2, (160, 160, 160))
+        self.blit_text(text, self.H * 0.075, (200, 200, 200), shadow=False,
+                       center=(self.W / 2, self.H * 0.68))
+
+    def starting(self, t):
+        self.screen.fill((0, 0, 0))
+        c = (self.W / 2, self.H / 2)
+        a = (t * 300) % 360
+        self.ring(WHITE, c, self.H * 0.06, self.px(6), alpha=50)
+        self.ring(WHITE, c, self.H * 0.06, self.px(6), alpha=220, start=a, end=a + 100)
+
     # ------------------------------------------------------------ status bar
     def drive_icon(self, x, cy, h, colour, kind):
         """SSD = small box with a light; SD = card with a cut corner."""

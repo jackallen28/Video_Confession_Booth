@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -16,10 +17,12 @@ from booth.storage import Storage  # noqa: E402
 
 
 def make_video(path, seconds=2):
+    """A recording as the recorder leaves it: H.264 + AAC in MPEG-TS."""
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
                     f"testsrc2=size=320x240:rate=30:duration={seconds}",
                     "-f", "lavfi", "-i", f"sine=duration={seconds}",
-                    "-c:v", "mjpeg", "-c:a", "pcm_s16le", "-f", "matroska", path], check=True)
+                    "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac",
+                    "-f", "mpegts", path], check=True)
 
 
 def setup(tmp):
@@ -32,11 +35,14 @@ def setup(tmp):
     return cfg, st
 
 
-def record(st, name, drives):
-    for d in drives:
-        make_video(d.path(name) + ".part")
-    return st.finalize({"name": name, "targets": {d.name: d.path(name) for d in drives},
-                        "duration": 2.0, "frames": 60, "dropped": 0})
+def record(st, name, drives, keep=True):
+    parts = {d.name: d.path(st.part_name(name)) for d in drives}
+    for p in parts.values():
+        make_video(p)
+    ok = st.finalize({"name": name, "parts": parts, "duration": 2.0, "frames": 60, "dropped": 0})
+    if keep:
+        st.accept(name)
+    return ok
 
 
 def run_queue(st):
@@ -110,12 +116,43 @@ def test_crash_leftover_recovered():
     with tempfile.TemporaryDirectory() as tmp:
         cfg, st = setup(tmp)
         name = st.new_name()
-        make_video(st.sd.path(name) + ".part")          # power cut mid-recording
+        make_video(st.sd.path(st.part_name(name)))      # power cut mid-recording
         st._reconcile()
         assert os.path.exists(st.sd.path(name))
+        assert not os.path.exists(st.sd.path(st.part_name(name)))
         run_queue(st)
         assert st.manifest.entry(name)["state"] == "safe"
-        assert st.new_name() > name                      # numbers never reused
+        assert st.new_name() != name                     # names never reused
+
+
+def test_names_are_timestamps_and_mp4():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp)
+        name = st.new_name()
+        assert re.fullmatch(r"\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d\.mp4", name), name
+        record(st, name, [st.ssd, st.sd])
+        run_queue(st)
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                            "stream=codec_name:format=format_name", "-of", "csv=p=0",
+                            st.sd.path(name)], capture_output=True, text=True)
+        assert "h264" in r.stdout and "aac" in r.stdout and "mp4" in r.stdout, r.stdout
+        from unittest import mock
+        with mock.patch("booth.storage.time.strftime", return_value=name[:-4]):
+            assert st.new_name() == name[:-4] + "_2.mp4"  # same second: _2 added
+
+
+def test_guest_delete():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp)
+        name = st.new_name()
+        assert record(st, name, [st.ssd, st.sd], keep=False)
+        st._reconcile()                                  # must not touch a clip under review
+        assert st._q.empty()
+        st.delete(name)
+        for d in (st.ssd, st.sd):
+            assert not [f for f in os.listdir(d.video_dir) if f.startswith(name[:-4])]
+        assert st.manifest.entry(name)["state"] == "deleted"
+        assert name not in st.manifest.names()
 
 
 if __name__ == "__main__":
