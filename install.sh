@@ -20,6 +20,8 @@ echo "== Installing packages (takes a few minutes)"
 apt-get update
 apt-get install -y ffmpeg python3-pygame python3-gpiozero v4l-utils alsa-utils \
                    exfatprogs util-linux fonts-dejavu-core
+# for the optional booth Wi-Fi network (sudo booth-wifi on)
+apt-get install -y dnsmasq-base iw || echo "   (Wi-Fi network packages not installed, carrying on)"
 for pkg in python3-lgpio smartmontools ntfs-3g; do
   apt-get install -y "$pkg" || echo "   (optional package $pkg not installed, carrying on)"
 done
@@ -41,6 +43,8 @@ fi
 printf '#!/bin/sh\ncd /opt/confession-booth && exec python3 -m booth.camera_setup "$@"\n' \
   > /usr/local/bin/booth-camera
 chmod 755 /usr/local/bin/booth-camera
+# The booth's own Wi-Fi network for phones: sudo booth-wifi on
+install -m 755 "$HERE/tools/booth-wifi" /usr/local/bin/booth-wifi
 
 echo "== Starting the booth at power-on"
 install -m 644 "$HERE/systemd/confession-booth.service" /etc/systemd/system/
@@ -62,4 +66,5 @@ fi
 echo
 echo "Done. Plug in the webcam, SSD, screen and button, then:  sudo reboot"
 echo "Camera settings (over SSH):  sudo booth-camera"
+echo "Booth Wi-Fi for your phone:  sudo booth-wifi on"
 echo "Live log:  journalctl -u confession-booth -f"

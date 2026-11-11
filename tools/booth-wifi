@@ -1,0 +1,132 @@
+#!/bin/bash
+# The booth's own Wi-Fi network (access point), so a phone can connect straight
+# to the Pi with no router or internet: then SSH to 10.42.0.1 (e.g. with the
+# Termius app) and run `sudo booth-camera`.
+#
+#   sudo booth-wifi on                     start it (and at every boot after this)
+#   sudo booth-wifi on "Booth" "pass1234"  ...with your own name and password (8+ characters)
+#   sudo booth-wifi off                    stop it; the Pi joins your normal Wi-Fi again
+#   sudo booth-wifi status                 name, password, address, phones connected
+#
+# Needs Raspberry Pi OS Bookworm or newer (NetworkManager). Ethernet keeps working; if the
+# Pi has internet on Ethernet, phones on the booth's Wi-Fi get internet through it too.
+set -euo pipefail
+
+CON=booth-ap
+CONF=/etc/confession-booth/wifi-ap.conf
+IFACE=wlan0
+ADDR=10.42.0.1
+
+die() { echo "booth-wifi: $*" >&2; exit 1; }
+
+[[ $EUID -eq 0 ]] || die "please run with sudo, e.g.  sudo booth-wifi ${1:-status}"
+command -v nmcli >/dev/null || die "NetworkManager (nmcli) not found: this needs Raspberry Pi OS Bookworm or newer"
+systemctl is-active --quiet NetworkManager || die "NetworkManager is not running"
+
+NAME=ConfessionBooth
+PASS=
+if [[ -f $CONF ]]; then
+  # shellcheck disable=SC1090
+  source "$CONF"
+fi
+
+# True if this command was typed over SSH through the Wi-Fi we're about to change.
+ssh_over_wifi() {
+  [[ -n ${SSH_CONNECTION:-} ]] || return 1
+  local server_ip
+  server_ip=$(awk '{print $3}' <<<"$SSH_CONNECTION")
+  ip -4 addr show dev "$IFACE" 2>/dev/null | grep -q "inet $server_ip/"
+}
+
+show() {
+  local state
+  state=$(nmcli -g GENERAL.STATE connection show "$CON" 2>/dev/null || true)
+  if [[ $state == activated ]]; then
+    echo "Booth Wi-Fi:  ON"
+  elif nmcli -g connection.autoconnect connection show "$CON" 2>/dev/null | grep -q yes; then
+    echo "Booth Wi-Fi:  starting (or not running yet)"
+  else
+    echo "Booth Wi-Fi:  off   (sudo booth-wifi on)"
+    return
+  fi
+  echo "  Network:    $NAME"
+  echo "  Password:   $PASS"
+  echo "  Connect:    ssh $(logname 2>/dev/null || echo pi)@$ADDR   (or @$(hostname).local)"
+  if command -v iw >/dev/null; then
+    echo "  Phones:     $(iw dev "$IFACE" station dump 2>/dev/null | grep -c '^Station' || true) connected"
+  fi
+}
+
+case "${1:-status}" in
+  on)
+    NAME=${2:-$NAME}
+    if [[ -n ${3:-} ]]; then
+      PASS=$3
+    elif [[ -z $PASS ]]; then
+      PASS=$(python3 -c 'import secrets; print("".join(secrets.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(10)))')
+    fi
+    (( ${#PASS} >= 8 && ${#PASS} <= 63 )) || die "the password must be 8 to 63 characters"
+    (( ${#NAME} >= 1 && ${#NAME} <= 32 )) || die "the network name must be 1 to 32 characters"
+
+    country=$(iw reg get 2>/dev/null | awk '/^country/ {sub(":", "", $2); print $2; exit}' || true)
+    if [[ -z $country || $country == 00 ]]; then
+      die "the Wi-Fi country isn't set, so Wi-Fi can't transmit. Set it first, e.g.
+    sudo raspi-config nonint do_wifi_country AU
+(use your two-letter country code), then run this again."
+    fi
+    rfkill unblock wifi 2>/dev/null || true
+
+    nmcli connection delete "$CON" >/dev/null 2>&1 || true
+    nmcli connection add type wifi ifname "$IFACE" con-name "$CON" ssid "$NAME" \
+      connection.autoconnect yes connection.autoconnect-priority 100 \
+      802-11-wireless.mode ap 802-11-wireless.band bg 802-11-wireless.channel 6 \
+      ipv4.method shared ipv4.addresses "$ADDR/24" ipv6.method disabled \
+      wifi-sec.key-mgmt wpa-psk wifi-sec.proto rsn wifi-sec.pairwise ccmp \
+      wifi-sec.group ccmp wifi-sec.pmf disable wifi-sec.psk "$PASS" >/dev/null
+
+    mkdir -p "$(dirname "$CONF")"
+    printf 'NAME=%q\nPASS=%q\n' "$NAME" "$PASS" > "$CONF"
+    chmod 600 "$CONF"
+
+    echo "Booth Wi-Fi network: $NAME"
+    echo "Password:            $PASS"
+    echo "On your phone, join it, then SSH to $ADDR (user $(logname 2>/dev/null || echo pi))."
+    echo "The phone may say \"No internet\" - that's normal, stay connected."
+    if ssh_over_wifi; then
+      echo
+      echo "Your SSH session runs over this Wi-Fi and will drop in 5 seconds."
+      echo "Join \"$NAME\" and reconnect to $ADDR."
+      sleep 5
+      setsid nohup nmcli connection up "$CON" >/dev/null 2>&1 &
+      exit 0
+    fi
+    nmcli connection up "$CON" >/dev/null || die "could not start it; see: journalctl -u NetworkManager"
+    echo "Running now, and at every boot."
+    ;;
+
+  off)
+    if ! nmcli connection show "$CON" >/dev/null 2>&1; then
+      echo "Booth Wi-Fi is not set up."
+      exit 0
+    fi
+    nmcli connection modify "$CON" connection.autoconnect no
+    if ssh_over_wifi; then
+      echo "Your SSH session runs over the booth Wi-Fi and will drop in 5 seconds."
+      sleep 5
+      setsid nohup sh -c "nmcli connection down $CON; nmcli device connect $IFACE" >/dev/null 2>&1 &
+      exit 0
+    fi
+    nmcli connection down "$CON" >/dev/null 2>&1 || true
+    nmcli device connect "$IFACE" >/dev/null 2>&1 || true   # rejoin a saved Wi-Fi, if any
+    echo "Booth Wi-Fi off. The Pi joins your saved Wi-Fi network again (if it's in range)."
+    ;;
+
+  status)
+    show
+    ;;
+
+  *)
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

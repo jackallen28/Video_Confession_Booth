@@ -104,10 +104,40 @@ knocks the SSD cable out mid-recording the microSD copy keeps going (and the oth
 the SSD isn't there at all, recording carries on to the microSD alone and the clips are copied to
 the SSD when it comes back. Roughly 4–5 GB per hour of recording at 1080p.
 
+## Connecting from your phone (booth Wi-Fi)
+
+The Pi can make its own Wi-Fi network, so you can reach it from your phone at the party with no
+router or internet:
+
+```bash
+sudo booth-wifi on        # prints the network name (ConfessionBooth) and password
+```
+
+From then on (also after every reboot) the Pi broadcasts **ConfessionBooth**. On your phone,
+join it (it'll say "No internet", that's normal; stay connected), then open an SSH app (e.g.
+Termius on iPhone/Android) and connect to **10.42.0.1** with the Pi's username and password. There
+you can run `sudo booth-camera`, check the log, etc.
+
+```bash
+sudo booth-wifi on "Booth" "secretpass"   # your own name and password (8+ characters)
+sudo booth-wifi status                    # name, password, address, phones connected
+sudo booth-wifi off                       # stop it; the Pi joins your normal Wi-Fi again
+```
+
+- While it's on, the Pi isn't on your home Wi-Fi, so it has no internet and can't set its clock
+  (use `sudo booth-camera time ...`). An Ethernet cable still works for internet, and then phones
+  on the booth Wi-Fi get internet through the Pi too.
+- If you run `on`/`off` over SSH through Wi-Fi, the session drops after 5 s; reconnect on the new
+  network.
+- The Wi-Fi country must be set (Raspberry Pi Imager does it when you enter Wi-Fi details;
+  otherwise `sudo raspi-config nonint do_wifi_country AU`).
+- It uses 2.4 GHz channel 6, which every phone supports. The Pi's antenna is small: expect a room or
+  two of range, more if the Pi isn't inside a metal box.
+
 ## Camera settings over SSH
 
 ```bash
-ssh pi@<booth address>
+ssh pi@<booth address>      # or 10.42.0.1 on the booth Wi-Fi
 sudo booth-camera
 ```
 
