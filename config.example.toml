@@ -1,0 +1,37 @@
+# Confession booth settings. Copied to /etc/confession-booth/config.toml by
+# install.sh. Remove the # in front of a line to change it, then restart:
+#   sudo systemctl restart confession-booth
+# Every setting and its default is listed in booth/config.py.
+
+# --- Camera ---
+# camera = "auto"              # or "/dev/video0"
+# camera_format = "mjpeg"      # "yuyv422" for cameras without MJPEG (use 640x480 then)
+# video_size = "1280x720"      # "1920x1080" if the webcam does MJPEG at 1080p
+# framerate = 30
+# preview_lowres = 1           # 2 for 1080p on a Pi 3B+
+# mirror_preview = true        # the screen is a mirror; recordings are never flipped
+
+# Stop light flicker: 1 = 50 Hz mains (Australia, UK, Europe), 2 = 60 Hz (USA)
+# v4l2_controls = { power_line_frequency = 1 }
+
+# --- Sound ---
+# audio = "auto"               # webcam mic; "none" for no sound, or "plughw:CARD=C920,DEV=0"
+# av_offset = 0.0              # seconds; make positive if the picture is ahead of the sound
+
+# --- Button (BCM numbering): GPIO17 = pin 11, other leg to GND = pin 9 ---
+# button_pin = 17
+# hold_shutdown_seconds = 30
+
+# --- Recording ---
+# countdown_from = 3
+# max_record_seconds = 300     # stops by itself after 5 minutes
+
+# --- Drives ---
+# sd_dir = "/srv/confessions"
+# ssd_label = ""               # set to the SSD's name if more than one USB drive is plugged in
+# ssd_subdir = "Confessions"
+# min_free_mb = 1024
+
+# --- Screen text ---
+# idle_text = "PRESS BUTTON TO RECORD"
+# action_text = "ACTION!"

@@ -1,0 +1,193 @@
+"""The camera runs all the time in one ffmpeg process with two outputs:
+
+  1. the camera's own JPEG frames, untouched (stdout, multipart JPEG) - these
+     are what gets recorded, so recording costs almost no CPU;
+  2. a small decoded RGB picture the size of the screen (a second pipe) for
+     the live preview.
+
+If the camera is unplugged or ffmpeg stops, it is restarted every few seconds.
+"""
+
+import logging
+import os
+import subprocess
+import threading
+import time
+
+from . import devices
+from .config import size_tuple
+
+log = logging.getLogger("booth.camera")
+
+
+class Camera:
+    def __init__(self, cfg, preview_size, log_dir):
+        self.cfg = cfg
+        self.pw, self.ph = preview_size
+        self.log_dir = log_dir
+        self.lowres = int(cfg["preview_lowres"])
+        self.device = None
+        self._proc = None
+        self._lock = threading.Lock()
+        self._frame = None          # latest preview frame (bytes, RGB)
+        self._frame_seq = 0
+        self._last_jpeg = 0.0
+        self._sinks = []            # callables getting every JPEG frame
+        self._stop = threading.Event()
+        self._fails = 0
+        self._thread = threading.Thread(target=self._supervise, name="camera", daemon=True)
+
+    # ---------------------------------------------------------------- public
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        self._kill()
+
+    def latest(self):
+        with self._lock:
+            return self._frame_seq, self._frame
+
+    @property
+    def ok(self):
+        return self._proc is not None and self._proc.poll() is None and \
+            time.monotonic() - self._last_jpeg < 3.0
+
+    def add_sink(self, fn):
+        with self._lock:
+            self._sinks = self._sinks + [fn]
+
+    def remove_sink(self, fn):
+        with self._lock:
+            self._sinks = [s for s in self._sinks if s is not fn]
+
+    # -------------------------------------------------------------- internal
+    def _command(self, preview_fd):
+        cfg = self.cfg
+        w, h = size_tuple(cfg["video_size"])
+        cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning"]
+        if self.device == "test":
+            cmd += ["-re", "-f", "lavfi", "-i",
+                    f"testsrc2=size={w}x{h}:rate={cfg['framerate']}"]
+            out_a = ["-c:v", "mjpeg", "-q:v", "4"]
+        else:
+            fmt = cfg["camera_format"]
+            if self.lowres and fmt == "mjpeg":
+                cmd += ["-lowres", str(self.lowres)]
+            cmd += ["-f", "v4l2", "-thread_queue_size", "64",
+                    "-input_format", fmt, "-video_size", f"{w}x{h}",
+                    "-framerate", str(cfg["framerate"]), "-i", self.device]
+            out_a = ["-c:v", "copy"] if fmt == "mjpeg" else ["-c:v", "mjpeg", "-q:v", "4"]
+        cmd += ["-map", "0:v"] + out_a + ["-f", "mpjpeg", "pipe:1"]
+        vf = [f"fps={cfg['preview_fps']}",
+              f"scale={self.pw}:{self.ph}:force_original_aspect_ratio=increase:flags=fast_bilinear",
+              f"crop={self.pw}:{self.ph}"]
+        if cfg["mirror_preview"]:
+            vf.append("hflip")
+        cmd += ["-map", "0:v", "-vf", ",".join(vf), "-pix_fmt", "rgb24",
+                "-f", "rawvideo", f"pipe:{preview_fd}"]
+        return cmd
+
+    def _supervise(self):
+        while not self._stop.is_set():
+            self.device = devices.find_camera(self.cfg["camera"])
+            if not self.device:
+                self._stop.wait(2)
+                continue
+            devices.apply_camera_controls(self.device, self.cfg["v4l2_controls"])
+            started = time.monotonic()
+            self._run_once()
+            if self._stop.is_set():
+                break
+            if time.monotonic() - started < 5:
+                self._fails += 1
+                if self.lowres and self._fails >= 2:
+                    log.warning("camera failing to start, trying without preview_lowres")
+                    self.lowres = 0
+            else:
+                self._fails = 0
+            self._stop.wait(2)
+
+    def _run_once(self):
+        r, w = os.pipe()
+        cmd = self._command(w)
+        log.info("camera: %s", " ".join(cmd))
+        errlog = open(os.path.join(self.log_dir, "camera-ffmpeg.log"), "ab")
+        try:
+            self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=errlog,
+                                          stdin=subprocess.DEVNULL, pass_fds=(w,),
+                                          bufsize=0)
+        except OSError as e:
+            log.error("cannot start ffmpeg: %s", e)
+            os.close(r)
+            os.close(w)
+            errlog.close()
+            return
+        os.close(w)
+        self._last_jpeg = time.monotonic()
+        pt = threading.Thread(target=self._read_preview, args=(r,), name="preview", daemon=True)
+        pt.start()
+        try:
+            self._read_jpegs(self._proc.stdout)
+        finally:
+            self._kill()
+            pt.join(timeout=2)
+            errlog.close()
+            log.warning("camera stopped (exit %s)", self._proc.returncode)
+
+    def _read_jpegs(self, raw):
+        import io
+        stream = io.BufferedReader(raw, buffer_size=1 << 20)
+        while not self._stop.is_set():
+            line = stream.readline()
+            if not line:
+                return
+            line = line.strip()
+            if not line or line.startswith(b"--"):
+                continue
+            length = None
+            while line:
+                key, _, val = line.partition(b":")
+                if key.strip().lower() == b"content-length":
+                    length = int(val.strip())
+                line = stream.readline().strip()
+            if length is None:
+                continue
+            data = stream.read(length)
+            if len(data) < length:
+                return
+            self._last_jpeg = time.monotonic()
+            for sink in self._sinks:
+                try:
+                    sink(data)
+                except Exception:  # never let a sink kill the camera
+                    log.exception("frame sink failed")
+
+    def _read_preview(self, fd):
+        size = self.pw * self.ph * 3
+        f = os.fdopen(fd, "rb", buffering=0)
+        try:
+            buf = bytearray(size)
+            view = memoryview(buf)
+            while True:
+                got = 0
+                while got < size:
+                    n = f.readinto(view[got:])
+                    if not n:
+                        return
+                    got += n
+                with self._lock:
+                    self._frame = bytes(buf)
+                    self._frame_seq += 1
+        finally:
+            f.close()
+
+    def _kill(self):
+        p = self._proc
+        if p and p.poll() is None:
+            p.terminate()
+            try:
+                p.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                p.kill()

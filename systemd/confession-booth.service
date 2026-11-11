@@ -1,0 +1,26 @@
+# Starts the booth on the Pi's screen at power-on and restarts it if it ever stops.
+[Unit]
+Description=Confession booth (camera, button, recorder)
+After=systemd-user-sessions.service sound.target
+# The booth takes over the first console (the screen) instead of the login prompt.
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/confession-booth
+ExecStart=/usr/bin/python3 -m booth
+Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=PYTHONUNBUFFERED=1
+StandardInput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+StandardOutput=journal
+StandardError=journal
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
