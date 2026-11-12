@@ -63,6 +63,9 @@ DEFAULTS = {
     "av_offset": 0.0,
 
     # --- Button -----------------------------------------------------------
+    # How guests start/stop: "touch" (tap the screen), "button" (the physical
+    # red button on button_pin, with its light on led_pin) or "both".
+    "input": "touch",
     "button_pin": 17,            # BCM numbering. Button between GPIO17 (pin 11) and GND (pin 9).
     "button_pull_up": True,
     "button_bounce": 0.05,
@@ -119,6 +122,10 @@ DEFAULTS = {
     "failed_text": "VIDEO NOT SAVED",
     "delete_hint_text": "HOLD BUTTON 3 SEC TO DELETE",
     "delete_confirm_text": "PRESS AGAIN TO DELETE",
+    # the same, when the touch screen is used
+    "touch_idle_text": "TAP TO RECORD",
+    "touch_delete_hint_text": "HOLD THE SCREEN 3 SEC TO DELETE",
+    "touch_delete_confirm_text": "TAP AGAIN TO DELETE",
     "deleted_text": "VIDEO DELETED",
 
     # --- Web page -----------------------------------------------------------

@@ -32,7 +32,9 @@
 # audio = "auto"               # webcam mic; "none" for no sound, or "plughw:CARD=C920,DEV=0"
 # av_offset = 0.0              # seconds; make positive if the picture is ahead of the sound
 
-# --- Button (BCM numbering): GPIO17 = pin 11, other leg to GND = pin 9 ---
+# --- Touch screen or button ---
+# input = "touch"              # "touch" (tap the screen), "button" (physical button) or "both"
+# Physical button (BCM numbering): GPIO17 = pin 11, other leg to GND = pin 9
 # button_pin = 17
 # hold_shutdown_seconds = 30
 # The light in the button (through a transistor, see README). -1 = no light.
@@ -64,6 +66,9 @@
 # low_free_mb = 8192           # "nearly full" = less than this left
 
 # --- Screen text ---
+# touch_idle_text = "TAP TO RECORD"
+# touch_delete_hint_text = "HOLD THE SCREEN 3 SEC TO DELETE"
+# touch_delete_confirm_text = "TAP AGAIN TO DELETE"
 # idle_text = "PRESS BUTTON TO RECORD"
 # action_text = "ACTION!"
 # saving_text = "VIDEO SAVING"

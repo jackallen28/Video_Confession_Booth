@@ -39,6 +39,12 @@ class UI:
         self._build_clapper()
 
     # ---------------------------------------------------------------- helpers
+    def word(self, key):
+        """On-screen text; with the touch screen in use, the 'tap' wording."""
+        if self.cfg.get("input", "touch") != "button" and "touch_" + key in self.cfg:
+            return self.cfg["touch_" + key]
+        return self.cfg[key]
+
     def px(self, v):
         return max(1, int(round(v * self.u)))
 
@@ -173,7 +179,7 @@ class UI:
         self.disc(RED, (cx, cy), rr, alpha=255 if pressed else 215)
         self.disc((255, 120, 120), (cx - rr * 0.25, cy - rr * 0.3), rr * 0.35, alpha=45)
         self.ring(WHITE, (cx, cy), rr + self.px(3), self.px(4), alpha=225)
-        self.blit_text(self.cfg["idle_text"], self.S * 0.06, WHITE,
+        self.blit_text(self.word("idle_text"), self.S * 0.06, WHITE,
                        midtop=(cx, cy + r + self.S * 0.03))
 
     def hold(self, progress):

@@ -1,23 +1,28 @@
 # Confession Booth (Raspberry Pi 3B+)
 
-A reality-TV "confession booth" for a party. Guests step in front of the webcam, press the big red
-button, get a 3-2-1 countdown, say their piece, and press the button
-again to stop. Every clip is saved as an MP4 to an external SSD **and** the microSD card, then checked.
+A reality-TV "confession booth" for a party. Guests step in front of the webcam, tap the touch
+screen (or press a big red button, if you fit one), get a 3-2-1 countdown, say their piece, and
+tap again to stop. Every clip is saved as an MP4 to an external SSD **and** the microSD card, then checked.
 
 ![Screens: idle, countdown, recording, TV switch-off, saving, hold to delete, confirm delete, saved, nearly-full warning](docs/screens.png)
 *(Screenshots from the built-in test picture. On the booth it's the live camera.)*
 
+**Touch screen or button:** by default guests tap **anywhere on the touch screen**; that does
+everything a press of the button does below ("hold" = keep a finger on the screen). To use a
+physical red button instead, or both, change **Screen → Start/stop with** on the web page (the
+booth restarts). The button's light is only used with the physical button.
+
 - **Idle:** live camera (mirrored like a mirror) with a slightly see-through red button and
-  `PRESS BUTTON TO RECORD`. The light in the button slowly breathes.
+  `TAP TO RECORD` (`PRESS BUTTON TO RECORD` with the physical button, whose light slowly breathes).
 - **Press:** 3-2-1 film-leader countdown (the button flashes with each number), then recording
   starts. Or, set on the web page (Screen → Before recording): a clapperboard snapping shut with
   **ACTION!** instead, the countdown then the clapperboard, or nothing.
 - **Recording:** a small flashing red dot and the time. The button light flashes with the dot.
 - **Press again:** the picture switches off like an old TV (squashes to a line, then a dot), 2 s of
   black, then **VIDEO SAVING** with a loading bar (at least 5 s) and
-  `HOLD BUTTON 3 SEC TO DELETE`. Then **VIDEO SAVED** ✓ and back to the camera.
+  `HOLD THE SCREEN 3 SEC TO DELETE` (or `HOLD BUTTON...`). Then **VIDEO SAVED** ✓ and back to the camera.
 - **Delete:** on the saving screen, hold the button for 3 s (a red ring fills, the light flickers
-  faster), let go, then press once more within 6 s (`PRESS AGAIN TO DELETE`, light blinking fast).
+  faster), let go, then tap/press once more within 6 s (`TAP AGAIN TO DELETE`, light blinking fast).
   The clip is removed from both drives: **VIDEO DELETED**. Not pressed = kept.
 - **Free space:** nothing on screen normally. When a drive is nearly full (under 8 GB left), a bar
   comes up at the bottom with the free space on the SSD (box icon) and microSD (card icon)
@@ -34,10 +39,10 @@ Starts by itself when the Pi is switched on. Recordings stop by themselves after
 |------|-------|
 | Raspberry Pi 3B+ | Raspberry Pi OS **Lite** (Bookworm or newer, 32 or 64-bit) on a 32 GB+ microSD |
 | USB webcam with a microphone | One that sends MJPEG (nearly all HD webcams: Logitech C270/C920/C922/Brio etc.) |
-| Small screen | HDMI or the official DSI touchscreen work best (any resolution; 800×480 is ideal). SPI "GPIO" screens are slow |
+| Small touch screen | The official DSI touchscreen or an HDMI screen with USB touch work best (any resolution; 800×480 is ideal). SPI "GPIO" screens are slow. Without touch, use the button |
 | USB SSD | exFAT (readable on Mac and Windows) or ext4. Name it e.g. `CONFESSIONS` |
-| Red momentary push button with a light | Arcade-style LED button (5 V or 12 V lamp), or a plain button plus a separate LED |
-| NPN transistor + 1 kΩ resistor | To switch the button's light (e.g. BC337, 2N2222, or a small LED driver board) |
+| *Optional:* red push button with a light | Arcade-style LED button (5 V or 12 V lamp), or a plain button plus a separate LED |
+| *Optional:* NPN transistor + 1 kΩ resistor | To switch the button's light (e.g. BC337, 2N2222, or a small MOSFET switch module) |
 | Power | Official 5.1 V 2.5 A supply. **Use a powered USB hub for the SSD** if it's a 2.5" drive (see below) |
 
 **Power matters.** The Pi 3B+ shares about 1.2 A between all four USB ports. A webcam plus a
@@ -45,7 +50,10 @@ Starts by itself when the Pi is switched on. Recordings stop by themselves after
 put the SSD (or both) on a powered USB hub. The booth checks for under-voltage and shows a yellow
 ⚡ in the status bar if it has happened since boot.
 
-## Wiring
+## Wiring (only for the physical button)
+
+Turn the button on with **Screen → Start/stop with → Physical button** (or "Touch screen or
+button") on the web page.
 
 ```
 Button switch:   one leg ── GPIO17 (pin 11)        other leg ── GND (pin 9)
@@ -58,7 +66,9 @@ Button light (5 V LED button, through an NPN transistor):
 ```
 
 - No resistor is needed on the switch (the Pi's internal pull-up is used).
-- A GPIO pin gives only 3.3 V and a few mA, so the button's lamp needs the transistor. For a
+- A GPIO pin gives only 3.3 V and a few mA, so the button's lamp needs the transistor (a 5 V LED
+  button with a built-in resistor may also work straight on GPIO27 → light +, light − → GND, just
+  dimmer: try it on pin 1 (3.3 V) first; fine if it's 20 mA or less). For a
   **12 V** lamp, connect "light +" to the 12 V supply instead of pin 2 and join that supply's
   ground to the Pi's GND.
 - A **plain small LED** can go straight on the pin: GPIO27 ── 330 Ω ── LED+ , LED− ── GND.
@@ -275,7 +285,7 @@ If the SSD can't be unmounted (red ✗), the Pi still shuts down normally, which
 No Pi needed (Linux or Mac with Python 3.11+, ffmpeg and `pip install pygame`):
 
 ```bash
-python3 -m booth --dev               # window, test picture + tone, space bar = the button, Esc = quit
+python3 -m booth --dev               # window, test picture + tone; click or space bar = tap, Esc = quit
                                      # web page: http://localhost:8080
 python3 -m booth.camera_setup --dev  # the SSH settings menu, saving to ./booth-data/settings.json
 ```
@@ -287,6 +297,7 @@ Tests:
 ```bash
 python3 tests/test_storage.py      # MP4 + names, verification, SSD unplugged then back, corruption repair, crash recovery, delete
 python3 tests/test_devices.py      # reading the webcam's modes and controls, resolution choice
+python3 tests/test_touch.py        # the touch screen: tap, two fingers, hold + tap again to delete
 python3 tests/test_web.py          # the web page: settings, live view, record, play/download, zip
 python3 tests/run_headless.py      # whole booth with no screen: keeps one clip, deletes one, shuts down; saves screenshots
 ```

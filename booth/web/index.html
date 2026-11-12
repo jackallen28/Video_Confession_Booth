@@ -157,8 +157,8 @@
     </div>
     <div class="card">
       <button class="btn red bigrec" id="recBtn">● Start recording</button>
-      <p class="muted" style="margin:8px 2px 0">Same as pressing the big red button: countdown on the
-        booth screen, then it records until you press again.</p>
+      <p class="muted" style="margin:8px 2px 0">Same as a guest tapping the screen / pressing the
+        button: countdown on the booth screen, then it records until you press again.</p>
     </div>
     <div class="card">
       <h2>Status</h2>
@@ -356,7 +356,7 @@ function render() {
   // banners
   const ban = $("#banners"); ban.innerHTML = "";
   if (s.restart_needed) ban.append(el("div", {class: "banner warn"},
-      el("span", {}, "New orientation / resolution: restart the booth to use it (a few seconds)."),
+      el("span", {}, "Some changes need a restart of the booth (a few seconds)."),
       el("button", {class: "btn small", onclick: restart}, "Restart now")));
   const off = (s.clock * 1000 - Date.now()) / 1000;
   if (Math.abs(off) > 90) ban.append(el("div", {class: "banner warn"},
@@ -426,6 +426,7 @@ const LABELS = {max: "Best available (auto)", when_full: "When nearly full",
   problems: "Nearly full or a problem", always: "Always",
   countdown: "3-2-1 countdown", clapperboard: "Clapperboard ACTION!", both: "Countdown, then clapperboard",
   "start_animation:none": "Nothing (record straight away)",
+  "input:touch": "Touch screen", "input:button": "Physical button", "input:both": "Touch screen or button",
   landscape: "Landscape", portrait: "Portrait",
   "picture_rotation:right": "Turn right ↻", "picture_rotation:left": "Turn left ↺",
   "picture_rotation:crop": "Camera not turned (use the middle)",

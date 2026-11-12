@@ -17,7 +17,7 @@ import time
 import pygame
 
 from . import devices, media, video
-from .button import Button
+from .button import Button, uses_button, uses_touch
 from .camera import Camera
 from .config import size_tuple
 from .led import Led
@@ -72,7 +72,10 @@ class App:
 
         self.ui = UI(self.screen, cfg)
         self.button = Button(cfg)
-        self.led = Led(cfg)
+        # the light lives in the physical button, so only drive it when that's in use
+        self.led = Led(cfg if uses_button(cfg) else dict(cfg, led_pin=-1))
+        self.touch_on = uses_touch(cfg)
+        self.press_source = None
         self.storage = Storage(cfg)
         self.camera = None
         self.device = None
@@ -178,14 +181,25 @@ class App:
                 elif ev.key == pygame.K_ESCAPE and ev.type == pygame.KEYDOWN \
                         and not self.cfg["fullscreen"]:
                     self.running = False
+            elif not self.touch_on or self.state == "shutdown":
+                continue
+            # Touch screen: a tap anywhere is a press of the button. Touches
+            # arrive as finger events, and on some screens as mouse clicks.
+            elif ev.type in (pygame.FINGERDOWN, pygame.FINGERUP):
+                self.button.touch(("f", ev.touch_id, ev.finger_id), ev.type == pygame.FINGERDOWN)
+            elif ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+                if getattr(ev, "touch", False) or ev.button not in (1, 2, 3):
+                    continue          # copy of a finger event, or a scroll wheel
+                self.button.touch("mouse", ev.type == pygame.MOUSEBUTTONDOWN)
 
         while True:
             ev = self.button.get()
             if ev is None:
                 break
-            kind, t = ev
+            kind, t, source = ev
             if kind == "down":
                 self.press_t = t
+                self.press_source = source
             elif kind == "up" and self.press_t is not None:
                 held = t - self.press_t
                 self.press_t = None
@@ -194,7 +208,7 @@ class App:
 
         if self.press_t is not None and self.state != "shutdown":
             held = now - self.press_t
-            if self.button._gpio is not None and not self.button.is_pressed and held > 1.0:
+            if self.press_source == "gpio" and not self.button.is_pressed and held > 1.0:
                 self.press_t = None          # missed release; forget it
             elif held >= self.cfg["hold_shutdown_seconds"]:
                 self.press_t = None
@@ -408,7 +422,7 @@ class App:
             self._draw_saving(now, fade_in=now - self.review_t0)
         elif st == "confirm":
             left = 1 - (now - self.confirm_t0) / cfg["delete_confirm_seconds"]
-            ui.confirm_delete(cfg["delete_confirm_text"], left, now)
+            ui.confirm_delete(ui.word("delete_confirm_text"), left, now)
         elif st == "deleted":
             if el < DELETED_SHOW:
                 ui.deleted(cfg["deleted_text"])
@@ -486,7 +500,7 @@ class App:
         if self._hold_kind(now) == "delete":
             hold = min(1.0, (now - self.press_t) / cfg["delete_hold_seconds"])
         self.ui.saving_screen(title, 1.0 if finished else progress,
-                              None if finished else cfg["delete_hint_text"], hold, ok, now)
+                              None if finished else self.ui.word("delete_hint_text"), hold, ok, now)
         if fade_in < FADE:
             self.ui.fade(255 * (1 - fade_in / FADE))
 
