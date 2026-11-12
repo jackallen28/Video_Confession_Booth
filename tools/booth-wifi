@@ -16,6 +16,7 @@ CON=booth-ap
 CONF=/etc/confession-booth/wifi-ap.conf
 IFACE=wlan0
 ADDR=10.42.0.1
+LOG=/var/log/booth-wifi.log
 
 die() { echo "booth-wifi: $*" >&2; exit 1; }
 
@@ -29,6 +30,25 @@ if [[ -f $CONF ]]; then
   # shellcheck disable=SC1090
   source "$CONF"
 fi
+
+# Starts the booth network. If it can't, puts the Pi back on its normal Wi-Fi
+# (so you don't lose it) and says why in $LOG.
+start_ap() {
+  local out
+  if out=$(nmcli connection up "$CON" 2>&1); then
+    echo "$(date '+%F %T') booth Wi-Fi \"$NAME\" started" >>"$LOG"
+    return 0
+  fi
+  {
+    echo "$(date '+%F %T') booth Wi-Fi did NOT start:"
+    echo "$out"
+    nmcli -f GENERAL.STATE,GENERAL.REASON device show "$IFACE" 2>&1
+    echo "  -> back to the normal Wi-Fi"
+  } >>"$LOG"
+  nmcli connection modify "$CON" connection.autoconnect no >/dev/null 2>&1
+  nmcli device connect "$IFACE" >/dev/null 2>&1
+  return 1
+}
 
 # True if this command was typed over SSH through the Wi-Fi we're about to change.
 ssh_over_wifi() {
@@ -47,6 +67,9 @@ show() {
     echo "Booth Wi-Fi:  starting (or not running yet)"
   else
     echo "Booth Wi-Fi:  off   (sudo booth-wifi on)"
+    if [[ -f $LOG ]]; then
+      echo; echo "Last attempts ($LOG):"; tail -n 12 "$LOG" | sed 's/^/  /'
+    fi
     return
   fi
   echo "  Network:    $NAME"
@@ -96,12 +119,20 @@ case "${1:-status}" in
       echo
       echo "Your SSH session runs over this Wi-Fi and will drop in 5 seconds."
       echo "Join \"$NAME\" and reconnect to $ADDR."
+      echo "(If \"$NAME\" doesn't appear within a minute, it couldn't start: the Pi goes back"
+      echo " on your normal Wi-Fi; SSH in again and run  sudo booth-wifi status  to see why.)"
       sleep 5
-      setsid nohup nmcli connection up "$CON" >/dev/null 2>&1 &
+      export -f start_ap
+      export CON NAME LOG IFACE
+      setsid nohup bash -c start_ap >/dev/null 2>&1 &
       exit 0
     fi
-    nmcli connection up "$CON" >/dev/null || die "could not start it; see: journalctl -u NetworkManager"
-    echo "Running now, and at every boot."
+    if ! start_ap; then
+      echo
+      tail -n 8 "$LOG" >&2
+      die "could not start the booth Wi-Fi (details above and in $LOG). The Pi is back on its normal Wi-Fi."
+    fi
+    echo "Running now, and at every boot. Look for \"$NAME\" on your phone."
     ;;
 
   off)
