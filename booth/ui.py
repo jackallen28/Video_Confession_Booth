@@ -474,6 +474,11 @@ class UI:
         self.blit_text(text, self.S * 0.075, (200, 200, 200), shadow=False,
                        center=(self.W / 2, self.H * 0.68))
 
+    def updating(self, t):
+        self.starting(t)
+        self.blit_text("UPDATING", self.S * 0.05, (170, 170, 170), shadow=False,
+                       center=(self.W / 2, self.H / 2 + self.S * 0.13))
+
     def starting(self, t):
         self.screen.fill((0, 0, 0))
         c = (self.W / 2, self.H / 2)

@@ -223,6 +223,7 @@ class Storage:
         self._plock = threading.Lock()
         self.busy = False
         self.stopping = threading.Event()
+        self.paused = threading.Event()      # software update: no new background jobs
         self._hlock = threading.Lock()       # health checks vs. eject
         self._ioerr = {}
         self._last = {"write": 0.0, "scrub": time.monotonic(), "smart": 0.0}
@@ -553,6 +554,9 @@ class Storage:
     def _worker(self):
         while not self.stopping.is_set():
             try:
+                if self.paused.is_set():
+                    time.sleep(0.5)
+                    continue
                 item = self._q.get(timeout=1)
             except queue.Empty:
                 continue
@@ -600,6 +604,16 @@ class Storage:
                             self.manifest.entry(name, create=True).setdefault("recovered", True)
                         else:
                             log.error("could not recover %s on %s: %s", f, d.name, why)
+                elif f.endswith(VIDEO_EXT + ".part") or f.endswith(VIDEO_EXT + ".tmp"):
+                    # a copy/conversion cut short (stop, power cut). Only removed
+                    # when a complete copy of that video exists somewhere.
+                    base = f.rsplit(".", 1)[0]
+                    if any(os.path.exists(x.path(base)) for x in self.drives if x.present):
+                        try:
+                            os.remove(d.path(f))
+                            log.info("removed unfinished copy %s on %s", f, d.name)
+                        except OSError:
+                            pass
                 elif f.endswith(VIDEO_EXT) and not f.startswith("."):
                     e = self.manifest.entry(f)
                     if e is None:

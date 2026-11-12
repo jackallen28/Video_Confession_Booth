@@ -10,13 +10,14 @@ import json
 import logging
 import os
 import queue
+import signal
 import subprocess
 import threading
 import time
 
 import pygame
 
-from . import devices, display, media, video
+from . import devices, display, media, updater, video
 from .button import Button, uses_button, uses_touch
 from .camera import Camera
 from .led import Led
@@ -99,6 +100,9 @@ class App:
         self.no_camera = False
         self.restart_needed = False   # a setting changed that needs a restart
         self.display_changed = False  # different screen plugged in: restart when idle
+        self.term_requested = False   # asked to stop: finish saving, then exit
+        self.camera_restart_wanted = False
+        self.status_extra = {}
         self.web = Web(self)
         self.save_ok = False
         self.review_t0 = 0.0
@@ -112,6 +116,8 @@ class App:
         if self.cfg["fullscreen"]:
             display.Watcher(lambda sig: self.events.put(("display_changed", sig))).start()
         threading.Thread(target=self._prepare_camera, name="prepare", daemon=True).start()
+        # systemctl stop/restart, an update or a shutdown: save the recording first
+        signal.signal(signal.SIGTERM, lambda *a: setattr(self, "term_requested", True))
         clock = pygame.time.Clock()
         while self.running:
             now = time.monotonic()
@@ -145,11 +151,15 @@ class App:
         log.debug("state %s -> %s", self.state, s)
         self.state = s
         self.state_t = time.monotonic()
+        self.status_extra = {}
+        self._write_status()
+
+    def _write_status(self):
         try:
             media.write_atomic(os.path.join(self.log_dir, "status.json"), json.dumps({
-                "state": s, "pid": os.getpid(), "since": time.strftime("%H:%M:%S"),
+                "state": self.state, "pid": os.getpid(), "since": time.strftime("%H:%M:%S"),
                 "camera": devices.camera_name(self.device) if self.device else None,
-                "mode": self.mode}))
+                "mode": self.mode, **self.status_extra}))
         except OSError:
             pass
 
@@ -320,6 +330,33 @@ class App:
         self._delete_thread.start()
         self.clip = None
 
+    def begin_update(self):
+        """Software update from the web page: only when idle. Stop taking
+        recordings, let background checks/copies finish, save everything,
+        then start the updater (its own process)."""
+        if self.state not in ("idle", "error") or self.press_t is not None:
+            return False
+        self.set_state("updating")
+
+        def prepare():
+            self.storage.paused.set()             # no new background jobs
+            end = time.monotonic() + 600
+            while self.storage.busy and time.monotonic() < end:
+                time.sleep(0.5)                   # let the current copy/check finish
+            try:
+                self.storage.manifest.save()
+            except OSError:
+                pass
+            os.sync()
+            self.status_extra = {"update_ready": True}
+            self._write_status()
+            try:
+                updater.launch(self.cfg)
+            except Exception as e:                # noqa: BLE001
+                self.events.put(("update_failed", str(e)))
+        threading.Thread(target=prepare, name="update", daemon=True).start()
+        return True
+
     def keep_clip(self):
         if self.clip:
             self.storage.accept(self.clip)
@@ -345,8 +382,14 @@ class App:
             elif kind == "display_changed":
                 self.display_changed = True
             elif kind == "camera_restart":
-                if self.camera:
-                    self.camera.restart()
+                self.camera_restart_wanted = True      # done when idle (see _update)
+            elif kind == "begin_update":
+                self.begin_update()
+            elif kind == "update_failed":
+                log.error("update didn't start: %s", val)
+                self.storage.paused.clear()
+                if self.state == "updating":
+                    self.set_state("idle")
             elif kind == "no_camera":
                 self.no_camera = True
             elif kind == "camera_ready":
@@ -404,6 +447,16 @@ class App:
             self.set_state("idle")
         elif self.state == "error" and el > ERROR_SHOW:
             self.set_state("idle")
+        if self.term_requested:
+            if self.state in ("countdown", "recording"):
+                log.warning("asked to stop: saving the recording first")
+                self.stop_recording()
+            elif self.save_done.is_set() and self.state not in ("stopping",) and self.running:
+                log.warning("stopping (recordings saved)")
+                self.running = False
+        if self.camera_restart_wanted and self.state == "idle" and self.camera:
+            self.camera_restart_wanted = False
+            self.camera.restart()
         if self.display_changed and self.state in ("idle", "error", "starting") \
                 and self.press_t is None and self.running:
             log.warning("restarting to fit the screen that's connected now")
@@ -427,6 +480,8 @@ class App:
             return
         if st == "starting":
             ui.no_camera(now) if self.no_camera else ui.starting(now)
+        elif st == "updating":
+            ui.updating(now)
         elif st == "stopping":
             ui.tv_off(self.frozen, el)
         elif st == "review":

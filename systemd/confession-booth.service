@@ -21,6 +21,10 @@ StandardOutput=journal
 StandardError=journal
 Restart=always
 RestartSec=2
+# On stop/restart/shutdown only the booth itself is told first, so it can stop
+# and save a recording properly (its ffmpeg helpers are ended afterwards).
+KillMode=mixed
+TimeoutStopSec=120
 
 [Install]
 WantedBy=multi-user.target

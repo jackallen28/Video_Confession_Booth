@@ -125,6 +125,21 @@ def test_crash_leftover_recovered():
         assert st.new_name() != name                     # names never reused
 
 
+def test_unfinished_copies_cleaned_only_if_safe():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp)
+        name = st.new_name()
+        record(st, name, [st.sd])
+        run_queue(st)
+        junk = st.ssd.path(name + ".part")           # copy to the SSD cut short
+        open(junk, "wb").write(b"half")
+        lonely = st.ssd.path("2020-01-01_00-00-00.mp4.part")   # no complete copy anywhere
+        open(lonely, "wb").write(b"only data")
+        st._reconcile()
+        assert not os.path.exists(junk), "half copy of a saved video removed"
+        assert os.path.exists(lonely), "never delete the only data"
+
+
 def test_names_are_timestamps_and_mp4():
     with tempfile.TemporaryDirectory() as tmp:
         cfg, st = setup(tmp)

@@ -106,14 +106,34 @@ Button light (5 V LED button, through an NPN transistor):
 5. On your phone (same Wi-Fi), open **http://booth.local** to set it up. For the party, turn on
    the booth's own Wi-Fi last: `sudo booth-wifi on` (see [Booth Wi-Fi](#booth-wi-fi)).
 
-**Updating** to a newer version (needs internet, so not while the booth Wi-Fi is on; run
-`sudo booth-wifi off` first, or plug in Ethernet):
+### Updating
+
+**From your phone:** web page → **System → Software update**. Save your phone's hotspot name and
+password once, turn on Personal Hotspot (iPhone: also turn on *Maximise Compatibility*, and stay on
+that screen), and tap **Update now**. The booth:
+
+1. waits until nobody is recording or saving, lets its background checks finish, saves its
+   records and shows *UPDATING* on the screen;
+2. switches its own Wi-Fi off and joins your hotspot (if it already has internet, e.g. a network
+   cable, it skips this);
+3. downloads the new version and installs it (system packages only if one is missing, to save
+   mobile data);
+4. turns its own Wi-Fi back on (always, even if something went wrong) and restarts. If the new
+   version doesn't keep running, it goes back to the previous one by itself.
+
+After 2–5 minutes rejoin the booth Wi-Fi and open the page: System shows the result and version.
+`sudo booth-update` over SSH does the same.
+
+**By hand** (needs internet, so not while the booth Wi-Fi is on; run `sudo booth-wifi off` first,
+or plug in Ethernet):
 
 ```bash
-cd ~/Video_Confession_Booth && git pull && sudo ./install.sh
+cd ~/Video_Confession_Booth && git pull && sudo ./install.sh && sudo systemctl restart confession-booth
 ```
 
-Your settings are kept.
+Your settings are kept. An update never touches the videos: it only replaces the program in
+`/opt/confession-booth` (swapped in at once, so a power cut can't leave half of it; the previous
+version is kept as `booth.prev`), and it waits if someone is recording.
 
 ## Video files
 
@@ -178,8 +198,9 @@ on your home network. It works with no internet. Tabs:
 - **Videos:** every recording with a thumbnail, length, size and whether it's verified on both
   drives. Tap to watch, **Download** one, or **Download all (.zip)**. On iPhone, downloads go to
   Files → Downloads; Share → Save Video puts one in Photos.
-- **System:** **set the booth's clock from your phone** (it has no clock battery), restart the
-  booth, shut down safely (same as holding the button 30 s), and the log.
+- **System:** **set the booth's clock from your phone** (it has no clock battery), **software
+  update** (see [Updating](#updating)), restart the booth, shut down safely (same as holding the
+  button 30 s), and the log.
 
 Settings are saved in `/etc/confession-booth/settings.json` and kept after a restart. Anyone who can
 reach the page can use it; to ask for a password, set `web_password = "..."` in
@@ -234,6 +255,20 @@ sudo booth-camera restart
 Other settings (pins, drives, web password) are in `/etc/confession-booth/config.toml` (all options
 are in [`config.example.toml`](config.example.toml)); after changing them:
 `sudo systemctl restart confession-booth`.
+
+## Keeping the videos safe
+
+- Each recording is written to the SSD and microSD at the same time, in a format that survives a
+  power cut, then turned into MP4 and checked (below).
+- Nothing on the web page can delete a video; only the guest, straight after recording (hold +
+  press again), can.
+- Restarts for settings, a new screen or camera, and updates only happen when nobody is
+  recording, saving or deciding whether to delete. Camera changes wait too.
+- If the booth is stopped anyway (`systemctl stop/restart`, a shutdown command, an update), it
+  first stops and saves a recording in progress.
+- Copies cut short by a power cut are cleaned up only when a complete copy of that video exists;
+  unfinished recordings are recovered at the next start.
+- Updates only replace the program, never the video folders.
 
 ## How the files are checked
 
@@ -307,6 +342,7 @@ python3 tests/test_storage.py      # MP4 + names, verification, SSD unplugged th
 python3 tests/test_devices.py      # reading the webcam's modes and controls, resolution choice
 python3 tests/test_touch.py        # the touch screen: tap, two fingers, hold + tap again to delete
 python3 tests/test_display.py      # fitting the screen; restart for a new screen, never mid-recording
+python3 tests/test_update.py       # software update via hotspot, Wi-Fi restored, rollback, saving on stop
 python3 tests/test_web.py          # the web page: settings, live view, record, play/download, zip
 python3 tests/run_headless.py      # whole booth with no screen: keeps one clip, deletes one, shuts down; saves screenshots
 ```

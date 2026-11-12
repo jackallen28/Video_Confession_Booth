@@ -214,6 +214,26 @@
         It has no battery, so set it after power-on if it isn't on the internet.</p>
     </div>
     <div class="card">
+      <h2>Software update</h2>
+      <div class="row"><span class="k">Version</span><span class="v" id="upVersion">…</span></div>
+      <div id="upStatus" class="hide" style="margin:6px 0 10px"></div>
+      <p class="muted" style="margin:4px 2px 8px">The booth uses your phone's hotspot to download
+        updates. Its own Wi-Fi switches off for a few minutes, then comes back by itself.
+        Videos are never touched, and it only updates when nobody is recording.</p>
+      <div class="row"><label for="hsName">Phone hotspot name</label>
+        <input type="text" id="hsName" placeholder="e.g. Jack's iPhone" autocomplete="off"></div>
+      <div class="row"><label for="hsPass">Hotspot password</label>
+        <input type="text" id="hsPass" placeholder="" autocomplete="off" autocapitalize="off"></div>
+      <button class="btn small" id="hsSave" style="margin:8px 0 12px">Save hotspot</button>
+      <ol class="muted" style="margin:0 0 12px;padding-left:20px">
+        <li>On your phone turn on <b>Personal Hotspot</b> (iPhone: Settings → Personal Hotspot →
+          Allow Others to Join, and turn on <b>Maximise Compatibility</b>). Stay on that screen.</li>
+        <li>Tap <b>Update now</b> below. Your phone drops off the booth Wi-Fi.</li>
+        <li>After 2–5 minutes the booth Wi-Fi is back: rejoin it and open this page to see the result.</li>
+      </ol>
+      <button class="btn wide red" id="upStart">Update now</button>
+    </div>
+    <div class="card">
       <h2>Booth</h2>
       <div class="row"><span class="k">Booth Wi-Fi</span><span class="v" id="wifiName">—</span></div>
       <div class="row"><span class="k">Restart the booth program</span>
@@ -289,7 +309,7 @@ function showTab(name) {
   updateLive();
   if (name === "camera") loadCamera();
   if (name === "camera" || name === "screen") loadSettings();
-  if (name === "system") loadLog();
+  if (name === "system") { loadLog(); loadUpdate(); }
   clearInterval(videosTimer);
   if (name === "videos") { loadVideos(); videosTimer = setInterval(loadVideos, 10000); }
   window.scrollTo(0, 0);
@@ -420,6 +440,43 @@ async function loadLog() {
   const pre = $("#log"); pre.textContent = r.lines.join("\n"); pre.scrollTop = pre.scrollHeight;
 }
 $("#logBtn").addEventListener("click", loadLog);
+
+// --------------------------------------------------------- software update
+async function loadUpdate() {
+  let r;
+  try { r = await api("/api/update"); } catch (e) { return; }
+  $("#upVersion").textContent = r.version;
+  if (r.hotspot && document.activeElement !== $("#hsName")) {
+    $("#hsName").value = r.hotspot.name;
+    $("#hsPass").placeholder = r.hotspot.has_password ? "saved (leave blank to keep)" : "none";
+  }
+  const box = $("#upStatus"), st = r.status;
+  if (st && Date.now() / 1000 - st.time < 3 * 3600) {
+    const when = new Date(st.time * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+    const cls = st.state === "done" ? "banner info" : st.state === "failed" ? "banner bad" : "banner warn";
+    box.className = cls;
+    box.replaceChildren(el("div", {}, el("b", {}, st.state === "working" ? "Updating… " : ""),
+      st.message, el("span", {class: "muted"}, "  (" + when + ")")));
+  } else box.className = "hide";
+  $("#upStart").disabled = r.booth_state !== "idle" && r.booth_state !== "error";
+  $("#upStart").textContent = r.booth_state === "updating" ? "Updating…" : "Update now";
+}
+$("#hsSave").addEventListener("click", async () => {
+  const name = $("#hsName").value.trim();
+  if (!name) return toast("Type the hotspot's name", true);
+  try {
+    await api("/api/update", {action: "hotspot", name, password: $("#hsPass").value});
+    $("#hsPass").value = ""; toast("Hotspot saved"); loadUpdate();
+  } catch (e) { toast(e.message, true); }
+});
+$("#upStart").addEventListener("click", async () => {
+  if (!$("#hsName").value.trim() && !confirm("No hotspot saved - only works if the booth has internet another way (e.g. a network cable). Carry on?")) return;
+  if (!confirm("Update now? The booth stops recording for a few minutes and its Wi-Fi switches off while it downloads. Make sure your phone's Personal Hotspot is on.")) return;
+  const r = await api("/api/update", {action: "start"}).catch(e => ({error: e.message}));
+  if (r.ok) toast("Updating… the booth Wi-Fi will go off in a moment"); else toast(r.error, true);
+  setTimeout(loadUpdate, 1500);
+});
+setInterval(() => { if (tab === "system" && !document.hidden) loadUpdate(); }, 4000);
 
 // --------------------------------------------------------------- settings
 const LABELS = {max: "Best available (auto)", when_full: "When nearly full",

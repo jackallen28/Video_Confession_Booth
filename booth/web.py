@@ -30,7 +30,7 @@ import time
 import urllib.parse
 import zipfile
 
-from . import config, devices, media, settings, video
+from . import config, devices, media, settings, updater, video
 
 log = logging.getLogger("booth.web")
 
@@ -222,6 +222,18 @@ class Web:
                 capture_output=True, timeout=60)
         return thumb if r.returncode == 0 and os.path.exists(thumb) else None
 
+    def update_info(self):
+        hs = updater.load_hotspot()
+        try:
+            with open(os.path.join(self.cfg["state_dir"], "update.json")) as f:
+                st = json.load(f)
+        except (OSError, ValueError):
+            st = None
+        return {"version": updater.installed_version(),
+                "hotspot": {"name": hs["name"], "has_password": bool(hs.get("password"))}
+                if hs else None,
+                "status": st, "booth_state": self.app.state}
+
     def log_tail(self, lines=200):
         path = os.path.join(self.cfg["state_dir"], "booth.log")
         try:
@@ -343,6 +355,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(data)
             elif p == "/preview.mjpg":
                 self._send_preview(float((q.get("fps") or ["4"])[0]))
+            elif p == "/api/update":
+                self._json(web.update_info())
             elif p == "/api/log":
                 self._json({"lines": web.log_tail()})
             else:
@@ -479,12 +493,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json({"ok": ok, "message": msg})
             elif p == "/api/action":
                 self._json(self._action(body))
+            elif p == "/api/update":
+                if body.get("action") == "hotspot":
+                    name, pw = str(body.get("name") or ""), str(body.get("password") or "")
+                    old = updater.load_hotspot()
+                    if not pw and old and old.get("name") == name.strip():
+                        pw = old.get("password", "")      # blank = keep the saved one
+                    updater.save_hotspot(name, pw)
+                    self._json({"ok": True})
+                elif body.get("action") == "start":
+                    self._json(self._update_start())
+                else:
+                    self._json({"error": "unknown"}, 400)
             else:
                 self._not_found()
         except (BrokenPipeError, ConnectionResetError):
             pass
         except (ValueError, TypeError) as e:
             self._json({"error": str(e)}, 400)
+
+    def _update_start(self):
+        app = self.web.app
+        if app.state not in ("idle", "error") or app.press_t is not None:
+            return {"ok": False, "error": "The booth is busy - try again when nobody is recording."}
+        if not app.cfg["allow_shutdown"]:
+            return {"ok": False, "error": "Updates only run on the Pi."}
+        if not updater.source_dir():
+            return {"ok": False, "error": "Run  sudo ./install.sh  once in the "
+                                          "Video_Confession_Booth folder first."}
+        app.events.put(("begin_update", None))
+        return {"ok": True}
 
     def _action(self, body):
         app = self.web.app
@@ -497,6 +535,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return {"ok": False, "error": "The booth is busy - try again when it's idle."}
             app.events.put(("restart", None))
             return {"ok": True}
+        if a == "update":
+            return self._update_start()
         if a == "shutdown":
             app.events.put(("shutdown", None))
             return {"ok": True}
