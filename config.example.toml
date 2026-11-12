@@ -61,6 +61,7 @@
 # min_free_mb = 1024
 
 # --- Screen ---
+# max_render_size = "1280x720" # bigger screens are drawn at this size and scaled up by the GPU
 # status_bar = "when_full"     # free space shows only when a drive is nearly full;
 #                              # "problems" = also drive faults, no SSD/mic, power; "always"
 # low_free_mb = 8192           # "nearly full" = less than this left

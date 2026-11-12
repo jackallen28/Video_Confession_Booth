@@ -34,6 +34,9 @@ def main():
         os.environ.setdefault("SDL_VIDEODRIVER", "kmsdrm")
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
     import pygame
+    if cfg["fullscreen"]:
+        from .display import wait_for_screen
+        wait_for_screen()            # no screen plugged in yet: wait instead of crashing
     pygame.display.init()
     pygame.font.init()
 

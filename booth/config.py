@@ -114,6 +114,9 @@ DEFAULTS = {
     # SSD/mic, power warnings) or "always".
     "status_bar": "when_full",
     "fullscreen": True,
+    # Screens bigger than this (e.g. a 1080p TV) are drawn at this size and
+    # scaled up by the GPU, which keeps the booth smooth on a Pi 3B+.
+    "max_render_size": "1280x720",
     "window_size": "800x480",    # only when fullscreen = false
     "idle_text": "PRESS BUTTON TO RECORD",
     "action_text": "ACTION!",

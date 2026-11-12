@@ -45,6 +45,14 @@ Starts by itself when the Pi is switched on. Recordings stop by themselves after
 | *Optional:* NPN transistor + 1 kΩ resistor | To switch the button's light (e.g. BC337, 2N2222, or a small MOSFET switch module) |
 | Power | Official 5.1 V 2.5 A supply. **Use a powered USB hub for the SSD** if it's a 2.5" drive (see below) |
 
+**Any HDMI (or DSI) screen.** The booth fits whatever screen is plugged in: it uses the
+screen's own resolution and lays everything out for its size and shape. On big screens (a 1080p
+monitor or TV) it draws at 1280×720 and the Pi's graphics chip scales that up to fill the screen,
+which keeps it smooth on a Pi 3B+ (`max_render_size`). Plugging in a different screen, or
+unplugging and replugging one, makes the booth restart itself to fit it (a few seconds; it waits
+until nobody is recording). With no screen connected at power-on it waits for one (the web page
+starts once a screen is there).
+
 **Power matters.** The Pi 3B+ shares about 1.2 A between all four USB ports. A webcam plus a
 2.5" SSD can pull more than that and brown out, which corrupts files. Use the official supply and
 put the SSD (or both) on a powered USB hub. The booth checks for under-voltage and shows a yellow
@@ -298,6 +306,7 @@ Tests:
 python3 tests/test_storage.py      # MP4 + names, verification, SSD unplugged then back, corruption repair, crash recovery, delete
 python3 tests/test_devices.py      # reading the webcam's modes and controls, resolution choice
 python3 tests/test_touch.py        # the touch screen: tap, two fingers, hold + tap again to delete
+python3 tests/test_display.py      # fitting the screen; restart for a new screen, never mid-recording
 python3 tests/test_web.py          # the web page: settings, live view, record, play/download, zip
 python3 tests/run_headless.py      # whole booth with no screen: keeps one clip, deletes one, shuts down; saves screenshots
 ```
@@ -312,6 +321,12 @@ python3 tests/run_headless.py      # whole booth with no screen: keeps one clip,
 - **Quiet sound:** `alsamixer`, then F6 to pick the webcam and F4 for capture levels.
 - **Lips out of sync:** set `av_offset` (seconds, e.g. `0.1` if the picture is ahead of the sound).
 - **Choppy preview:** set `preview_fps = 10`. Recordings are not affected.
+- **HDMI screen shows the wrong size / a black border / nothing:** some small HDMI screens report
+  their size wrongly. Tell the Pi the size by adding e.g. ` video=HDMI-A-1:800x480@60` to the end of
+  the single line in `/boot/firmware/cmdline.txt` (use your screen's resolution), then reboot.
+- **Touch doesn't respond:** check the screen's touch USB cable is connected (HDMI screens send
+  touch over USB) and see whether it's listed by `ls /dev/input/by-id/`. Or set Start/stop with →
+  Physical button on the web page.
 - **Wrong time in file names / timestamp:** web page → System → set the clock from your phone,
   `sudo booth-camera time "2026-12-31 21:30"`, or give
   the Pi Wi-Fi for a minute.

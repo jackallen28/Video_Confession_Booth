@@ -16,10 +16,9 @@ import time
 
 import pygame
 
-from . import devices, media, video
+from . import devices, display, media, video
 from .button import Button, uses_button, uses_touch
 from .camera import Camera
-from .config import size_tuple
 from .led import Led
 from .recorder import Recorder
 from .storage import Storage
@@ -41,10 +40,7 @@ class App:
         self.log_dir = cfg["state_dir"]
         os.makedirs(self.log_dir, exist_ok=True)
 
-        if cfg["fullscreen"]:
-            self.display = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-        else:
-            self.display = pygame.display.set_mode(size_tuple(cfg["window_size"]))
+        self.display = display.open_display(cfg)
         pygame.display.set_caption("Confession Booth")
         pygame.mouse.set_visible(False)
         DW, DH = self.display.get_size()
@@ -102,6 +98,7 @@ class App:
         self._delete_thread = None
         self.no_camera = False
         self.restart_needed = False   # a setting changed that needs a restart
+        self.display_changed = False  # different screen plugged in: restart when idle
         self.web = Web(self)
         self.save_ok = False
         self.review_t0 = 0.0
@@ -112,12 +109,19 @@ class App:
     def run(self):
         self.storage.start()
         self.web.start()
+        if self.cfg["fullscreen"]:
+            display.Watcher(lambda sig: self.events.put(("display_changed", sig))).start()
         threading.Thread(target=self._prepare_camera, name="prepare", daemon=True).start()
         clock = pygame.time.Clock()
         while self.running:
             now = time.monotonic()
             self.step(now)
-            pygame.display.flip()
+            try:
+                pygame.display.flip()
+            except pygame.error as e:          # screen gone; restart when free
+                if not self.display_changed:
+                    log.warning("screen problem: %s", e)
+                self.display_changed = True
             clock.tick(30)
         self.led.off()
         if self.camera:
@@ -338,6 +342,8 @@ class App:
             elif kind == "shutdown":
                 if self.state != "shutdown":
                     self.start_shutdown()
+            elif kind == "display_changed":
+                self.display_changed = True
             elif kind == "camera_restart":
                 if self.camera:
                     self.camera.restart()
@@ -398,7 +404,12 @@ class App:
             self.set_state("idle")
         elif self.state == "error" and el > ERROR_SHOW:
             self.set_state("idle")
-        elif self.state == "idle" and now - self._last_check > 5:
+        if self.display_changed and self.state in ("idle", "error", "starting") \
+                and self.press_t is None and self.running:
+            log.warning("restarting to fit the screen that's connected now")
+            self.exit_code = 3
+            self.running = False
+        if self.state == "idle" and now - self._last_check > 5:
             self._last_check = now
             dev = devices.find_camera(cfg["camera"])
             if dev and self.device != "test" and dev != self.device:
