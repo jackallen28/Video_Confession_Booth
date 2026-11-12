@@ -85,7 +85,7 @@ class Recorder:
                     "-sample_rate", str(cfg["audio_rate"]),
                     "-channels", str(cfg["audio_channels"]), "-i", mic]
         cmd += ["-map", "0:v"] + (["-map", "1:a"] if mic else [])
-        cmd += ["-vf", video.video_filter(cfg, m["w"], m["h"], self.log_dir)]
+        cmd += ["-vf", video.video_filter(cfg, m["w"], m["h"], self.log_dir, m["fps"])]
         cmd += video.encoder_args(cfg, m["encoder"], m["w"], m["h"], m["fps"])
         if mic:
             cmd += ["-c:a", "aac", "-b:a", cfg["audio_bitrate"]]

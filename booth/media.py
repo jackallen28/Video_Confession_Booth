@@ -160,6 +160,11 @@ def remux_to_mp4(src, dst, timeout=900):
     try:
         r = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-y", "-i", src,
                             "-map", "0:v?", "-map", "0:a?", "-c", "copy",
+                            # Fill in decode times the Pi's hardware encoder can leave
+                            # out (Apple players refuse those files; Chrome doesn't mind).
+                            "-bsf:v", r"setts=dts=if(eq(DTS\,NOPTS)\,PTS\,DTS)",
+                            # index at the front: plays straight away in Safari
+                            "-movflags", "+faststart",
                             "-f", "mp4", tmp], capture_output=True, timeout=timeout)
         if r.returncode != 0:
             raise OSError(r.stderr.decode(errors="replace").strip()[-300:] or "ffmpeg failed")
@@ -210,6 +215,55 @@ def copy_file(src, dst, throttle=None, abort=None):
         except OSError:
             pass
         raise
+
+
+def iphone_issues(path):
+    """Reasons an MP4 may not play on iPhone/Safari/QuickTime ([] = fine)."""
+    try:
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                            "stream=codec_type,codec_name,codec_tag_string,profile,level,pix_fmt,"
+                            "is_avc,extradata_size,width,height", "-of", "json", path],
+                           capture_output=True, timeout=60)
+        streams = json.loads(r.stdout or b"{}").get("streams", [])
+        r2 = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                             "-show_entries", "packet=pts,dts", "-of", "csv=p=0", path],
+                            capture_output=True, timeout=120)
+    except (OSError, subprocess.SubprocessError, ValueError) as e:
+        return [f"could not check: {e}"]
+    issues = []
+    v = next((s for s in streams if s.get("codec_type") == "video"), None)
+    if not v:
+        return ["no video"]
+    if v.get("codec_name") != "h264":
+        issues.append(f"video is {v.get('codec_name')}, not H.264")
+    if v.get("codec_tag_string") != "avc1":
+        issues.append(f"video tag {v.get('codec_tag_string')} (needs avc1)")
+    if str(v.get("is_avc")) != "true" or not int(v.get("extradata_size") or 0):
+        issues.append("H.264 settings (SPS/PPS) missing from the MP4 header")
+    if v.get("profile") not in ("Constrained Baseline", "Baseline", "Main", "High"):
+        issues.append(f"H.264 profile {v.get('profile')}")
+    if v.get("pix_fmt") not in ("yuv420p", "yuvj420p"):
+        issues.append(f"colour format {v.get('pix_fmt')} (needs 4:2:0)")
+    if int(v.get("level") or 0) > 52:
+        issues.append(f"H.264 level {v.get('level')}")
+    if int(v.get("width") or 0) % 2 or int(v.get("height") or 0) % 2:
+        issues.append("odd picture size")
+    a = next((s for s in streams if s.get("codec_type") == "audio"), None)
+    if a and a.get("codec_name") != "aac":
+        issues.append(f"sound is {a.get('codec_name')}, not AAC")
+    bad_ts, prev = 0, None
+    for line in r2.stdout.decode(errors="replace").splitlines():
+        pts, _, dts = line.partition(",")
+        if not dts.strip().lstrip("-").isdigit():
+            bad_ts += 1
+            continue
+        d = int(dts)
+        if prev is not None and d <= prev:
+            bad_ts += 1
+        prev = d
+    if bad_ts:
+        issues.append(f"{bad_ts} frames with missing or repeated timestamps")
+    return issues
 
 
 def human_bytes(n):

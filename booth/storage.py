@@ -327,23 +327,29 @@ class Storage:
             log.info("%s on %s: %s", name, drive_name, p)
             outcome[drive_name] = p["ok"]
             if p["ok"]:
+                finals.append(final)
                 try:
                     os.remove(part)
                 except OSError:
                     pass
 
         self.held.add(name)
+        finals = []
         threads = [threading.Thread(target=one, args=(k, v)) for k, v in result["parts"].items()]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
+        iphone = media.iphone_issues(finals[0]) if finals else ["not saved"]
         with self.manifest.lock:
             e = self.manifest.entry(name, create=True)
             e.update({"created": time.strftime("%Y-%m-%d %H:%M:%S"),
                       "seconds": round(result["duration"], 1),
                       "frames": result["frames"], "dropped_frames": result["dropped"],
-                      "recorded_to": sorted(result["parts"]), "state": "review"})
+                      "recorded_to": sorted(result["parts"]), "state": "review",
+                      "iphone": iphone})
+            if iphone:
+                log.warning("%s may not play on iPhone/Safari: %s", name, "; ".join(iphone))
             self.manifest.save()
         return any(outcome.values())
 

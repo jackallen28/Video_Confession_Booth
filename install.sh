@@ -43,6 +43,10 @@ fi
 printf '#!/bin/sh\ncd /opt/confession-booth && exec python3 -m booth.camera_setup "$@"\n' \
   > /usr/local/bin/booth-camera
 chmod 755 /usr/local/bin/booth-camera
+# Will a recording play on iPhone/Safari: sudo booth-check-video
+printf '#!/bin/sh\ncd /opt/confession-booth && exec python3 -m booth.checkvideo "$@"\n' \
+  > /usr/local/bin/booth-check-video
+chmod 755 /usr/local/bin/booth-check-video
 # The booth's own Wi-Fi network for phones: sudo booth-wifi on
 install -m 755 "$HERE/tools/booth-wifi" /usr/local/bin/booth-wifi
 

@@ -78,7 +78,7 @@ def output_size(cfg, w, h):
     return (h * 9 // 16) // 2 * 2, h
 
 
-def video_filter(cfg, w, h, workdir):
+def video_filter(cfg, w, h, workdir, fps=None):
     """Filters for the recording: 4:2:0, upright for portrait, optional date/time."""
     parts = ["format=yuv420p"] + orient_filters(cfg)
     w, h = output_size(cfg, w, h)
@@ -101,6 +101,11 @@ def video_filter(cfg, w, h, workdir):
         if os.path.exists(FONT):
             opts.insert(1, f"fontfile={_filter_escape(FONT)}")
         parts.append("drawtext=" + ":".join(opts))
+    if fps:
+        # Constant frame rate into the encoder: webcams slow down in dim light,
+        # and Apple players (iPhone, Safari, QuickTime) are fussy about uneven
+        # frame timing. Missing frames are repeated instead.
+        parts.append(f"fps={float(fps):g}")
     return ",".join(parts)
 
 
@@ -211,7 +216,7 @@ def benchmark(cfg, mode, encoder, workdir, seconds=4.0):
         cmd = (["ffmpeg", "-v", "error", "-nostdin", "-y", "-framerate", str(fps), "-f", "mjpeg",
                 "-i", src, "-f", "lavfi", "-i",
                 f"anullsrc=r={cfg['audio_rate']}:cl=mono", "-t", str(seconds),
-                "-map", "0:v", "-map", "1:a", "-vf", video_filter(cfg, w, h, workdir)]
+                "-map", "0:v", "-map", "1:a", "-vf", video_filter(cfg, w, h, workdir, fps)]
                + encoder_args(cfg, encoder, w, h, fps)
                + ["-c:a", "aac", "-b:a", cfg["audio_bitrate"],
                   "-f", "tee", f"[f=mpegts:onfail=ignore]{part}"])

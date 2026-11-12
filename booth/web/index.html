@@ -570,6 +570,7 @@ function vidRow(v) {
     el("div", {},
       el("div", {class: "t"}, nameDate(v.name)),
       el("div", {class: "m"}, `${mmss(v.seconds)} · ${v.size_text}`, chip),
+      v.iphone && v.iphone.length ? el("div", {class: "m warnc"}, "May not play on iPhone: " + v.iphone.join("; ")) : null,
       el("div", {class: "acts"},
         el("button", {class: "btn small", onclick: () => play(v)}, "▶ Play"),
         el("a", {class: "btn small green", href: "/video/" + u + "?dl=1", download: v.name}, "⬇ Download"))));

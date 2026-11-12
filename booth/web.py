@@ -201,6 +201,7 @@ class Web:
             dur = max([c.get("duration") or 0 for c in copies.values()] + [0]) or e.get("seconds")
             out.append({"name": name, "size": size, "size_text": media.human_bytes(size),
                         "seconds": dur, "state": e.get("state"),
+                        "iphone": e.get("iphone"),
                         "created": e.get("created"),
                         "on": sorted(d.name for d in st.drives
                                      if d.present and os.path.exists(d.path(name)))})
