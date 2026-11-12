@@ -66,21 +66,36 @@ Button light (5 V LED button, through an NPN transistor):
 
 ## Setting up
 
-1. Flash **Raspberry Pi OS Lite** with Raspberry Pi Imager. In its settings, set a username,
-   password, Wi-Fi and enable SSH. Set the time zone too (the file names and the optional
-   timestamp use the Pi's clock).
-2. Copy this folder to the Pi (or `git clone` the repository on the Pi) and run:
+1. Flash **Raspberry Pi OS Lite (64-bit)** with Raspberry Pi Imager (Device: Raspberry Pi 3). In
+   its settings, set the hostname (e.g. `booth`), a username and password, your Wi-Fi **and the
+   Wi-Fi country**, the time zone (file names and the optional timestamp use the Pi's clock), and
+   turn on SSH.
+2. Format the SSD as **exFAT** and name it `CONFESSIONS` (Disk Utility on a Mac, Format on Windows).
+3. Start the Pi, log in over SSH (`ssh <username>@booth.local`) and run:
    ```bash
-   cd ConfessionBooth
+   sudo apt install -y git
+   git clone https://github.com/jackallen28/Video_Confession_Booth.git
+   cd Video_Confession_Booth
    sudo ./install.sh
-   sudo reboot
    ```
    This installs ffmpeg, pygame and gpiozero, copies the program to `/opt/confession-booth`,
-   adds the web page and the `booth-camera` / `booth-wifi` tools, and makes the booth start on the screen at power-on
-   (no desktop, no login prompt, no boot text).
-3. Plug in the webcam, SSD, screen and button. The booth appears on the screen within a minute.
-   **The first time** (and after changing camera or resolution settings) there's a spinner for a
-   minute or two while it tests which resolution this Pi can record smoothly (see below).
+   adds the web page and the `booth-camera` / `booth-wifi` tools, and makes the booth start on the
+   screen at power-on (no desktop, no login prompt, no boot text). It takes 5–10 minutes.
+4. Switch off, plug in the webcam, SSD, screen and button (see [Wiring](#wiring)), and switch on
+   again. The booth appears on the screen within a minute. **The first time** (and after changing
+   camera, orientation or resolution settings) there's a spinner for a minute or two while it
+   tests which resolution this Pi can record smoothly (see below).
+5. On your phone (same Wi-Fi), open **http://booth.local** to set it up. For the party, turn on
+   the booth's own Wi-Fi last: `sudo booth-wifi on` (see [Booth Wi-Fi](#booth-wi-fi)).
+
+**Updating** to a newer version (needs internet, so not while the booth Wi-Fi is on; run
+`sudo booth-wifi off` first, or plug in Ethernet):
+
+```bash
+cd ~/Video_Confession_Booth && git pull && sudo ./install.sh
+```
+
+Your settings are kept.
 
 ## Video files
 
