@@ -185,10 +185,10 @@ class Web:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         media.write_atomic(path, json.dumps(data, indent=1, sort_keys=True) + "\n")
 
-    def videos(self):
+    def videos(self, deleted=False):
         st = self.app.storage
         out = []
-        for name in st.manifest.names():
+        for name in (st.deleted_names() if deleted else st.manifest.names()):
             e = st.manifest.entry(name) or {}
             path = st.video_path(name)
             if not path:
@@ -203,8 +203,9 @@ class Web:
                         "seconds": dur, "state": e.get("state"),
                         "iphone": e.get("iphone"),
                         "created": e.get("created"),
-                        "on": sorted(d.name for d in st.drives
-                                     if d.present and os.path.exists(d.path(name)))})
+                        "deleted": e.get("deleted") if deleted else None,
+                        "on": sorted(d.name for d in st.drives if d.present and os.path.exists(
+                            st.deleted_path(d, name) if deleted else d.path(name)))})
         out.sort(key=lambda v: v["name"], reverse=True)
         return out
 
@@ -292,7 +293,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def _video_name(self, raw):
         name = urllib.parse.unquote(raw)
-        if not NAME_OK.match(name) or name not in self.web.app.storage.manifest.names():
+        st = self.web.app.storage
+        if not NAME_OK.match(name) or (name not in st.manifest.names()
+                                       and name not in st.deleted_names()):
             return None, None
         path = self.web.app.storage.video_path(name)
         return (name, path) if path else (None, None)
@@ -327,7 +330,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json({"controls": controls, "mic": {"card": card,
                                                           "levels": devices.mic_levels(card)}})
             elif p == "/api/videos":
-                self._json({"videos": web.videos()})
+                self._json({"videos": web.videos(), "deleted": web.videos(deleted=True)})
             elif p.startswith("/video/"):
                 name, path = self._video_name(p[len("/video/"):])
                 if not path:
@@ -484,6 +487,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ok, msg = devices.set_control(app.device, name, value)
                 web.save_control(name, value)
                 self._json({"ok": ok, "message": msg})
+            elif p == "/api/videos/restore":
+                name = str(body.get("name") or "")
+                ok = NAME_OK.match(name) is not None and app.storage.restore(name)
+                self._json({"ok": bool(ok)} if ok else {"ok": False, "error": "couldn't restore it"})
             elif p == "/api/mic":
                 card = devices.mic_card(app.mic)
                 if not card:

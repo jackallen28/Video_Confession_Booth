@@ -166,8 +166,17 @@ def test_guest_delete():
         st.delete(name)
         for d in (st.ssd, st.sd):
             assert not [f for f in os.listdir(d.video_dir) if f.startswith(name[:-4])]
+            kept = os.path.join(d.video_dir, "DELETED", name)
+            assert media.probe(kept)["ok"], "guest-deleted clips are moved, never erased"
         assert st.manifest.entry(name)["state"] == "deleted"
-        assert name not in st.manifest.names()
+        assert name not in st.manifest.names() and name in st.deleted_names()
+        assert st.video_path(name).endswith(os.path.join("DELETED", name))
+        assert name not in open(os.path.join(st.sd.video_dir, "SHA256SUMS")).read()
+        # restore from the web page
+        assert st.restore(name)
+        run_queue(st)
+        assert st.manifest.entry(name)["state"] == "safe"
+        assert os.path.exists(st.sd.path(name)) and os.path.exists(st.ssd.path(name))
 
 
 if __name__ == "__main__":

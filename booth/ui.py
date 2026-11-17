@@ -312,21 +312,27 @@ class UI:
 
     # ------------------------------------------------------------- recording
     def recording(self, elapsed, remaining, t):
+        """[● RECORDING 0:42] in the top-left corner; the dot blinks with the button light."""
         m, s = divmod(int(elapsed), 60)
-        txt = f"{m}:{s:02d}"
         size = self.S * 0.068
         colour = AMBER if remaining < 30 else WHITE
-        label = self.text(txt, size, colour)
+        word = self.cfg.get("recording_text") or ""
+        label = self.text(f"{m}:{s:02d}", size, colour)
+        tag = self.text(word, size * 0.8, (255, 90, 90)) if word else None
         r = self.S * 0.021
         pad = self.S * 0.022
+        gap = pad * 0.8
         h = int(max(label.get_height(), 2 * r) + pad * 1.1)
-        w = int(pad + 2 * r + pad * 0.8 + label.get_width() + pad)
+        w = int(pad + 2 * r + gap + (tag.get_width() + gap if tag else 0) + label.get_width() + pad)
         rect = pygame.Rect(int(self.S * 0.03), int(self.S * 0.03), w, h)
-        self.rrect((0, 0, 0), rect, 120, h / 2)
+        self.rrect((0, 0, 0), rect, 130, h / 2)
         if (t % 1.0) < 0.6:
             self.disc((255, 40, 40), (rect.x + pad + r, rect.centery), r)
-        self.screen.blit(label, label.get_rect(midleft=(int(rect.x + pad + 2 * r + pad * 0.8),
-                                                         rect.centery + self.px(1))))
+        x = rect.x + pad + 2 * r + gap
+        if tag:
+            self.screen.blit(tag, tag.get_rect(midleft=(int(x), rect.centery + self.px(1))))
+            x += tag.get_width() + gap
+        self.screen.blit(label, label.get_rect(midleft=(int(x), rect.centery + self.px(1))))
 
     # ---------------------------------------------------------------- saving
     def saving(self, t):
@@ -385,6 +391,135 @@ class UI:
             self.disc(WHITE, (W / 2, cy), r * 4, alpha=110 * (1 - p))
             self.disc(WHITE, (W / 2, cy), r, alpha=255 * (1 - p))
 
+    TV_ON = 0.75
+
+    def tv_on(self, picture, t):
+        """Old CRT switching on (the reverse of tv_off): a dot, a bright line,
+        then the picture opens up from the middle."""
+        self.screen.fill((0, 0, 0))
+        W, H = self.W, self.H
+        cy = H // 2
+        if t < 0.2:
+            p = t / 0.2
+            r = self.S * 0.012 * (0.5 + 0.5 * p)
+            self.disc(WHITE, (W / 2, cy), r * 4, alpha=110 * p)
+            self.disc(WHITE, (W / 2, cy), r, alpha=255 * p)
+        elif t < 0.38:
+            p = ease_out((t - 0.2) / 0.18)
+            w = max(4, int(W * p))
+            th = max(2, self.px(3))
+            self.rrect(WHITE, pygame.Rect(W // 2 - w // 2, cy - th * 2, w, th * 4), 70, th * 2)
+            self.rrect((255, 255, 255), pygame.Rect(W // 2 - w // 2, cy - th // 2, w, th), 255, 0)
+        elif picture is not None:
+            p = ease_out((t - 0.38) / (self.TV_ON - 0.38))
+            h = max(2, int(H * p))
+            img = pygame.transform.scale(picture, (W, h))
+            glow = pygame.Surface((W, h))
+            glow.fill((255, 255, 255))
+            glow.set_alpha(int(230 * (1 - p)))
+            img.blit(glow, (0, 0))
+            self.screen.blit(img, (0, cy - h // 2))
+
+    def press_hint(self, t, pressed, x_frac, glow=1.0):
+        """Waiting screen with the physical button: black, a little hand pressing a
+        glowing red arcade button, and an arrow pointing up at the real button."""
+        self.screen.fill((0, 0, 0))
+        W, H = self.W, self.H
+        u = self.S * 0.36                       # size of the drawing
+        ax = int(max(self.S * 0.06, min(W - self.S * 0.06, W * x_frac)))
+        cx = max(u * 0.65, min(W - u * 0.65, ax))   # drawing stays on screen
+        # arrow up to the button (bobs upwards)
+        bob = self.S * 0.02 * (0.5 - 0.5 * math.cos(t * 2 * math.pi / 1.2))
+        top = int(H * 0.05 - bob)
+        bottom = int(H * 0.36 - bob)
+        shaft = max(4, int(self.S * 0.022))
+        head = self.S * 0.075
+        self.rrect(WHITE, pygame.Rect(ax - shaft // 2, int(top + head * 0.8), shaft,
+                                      max(2, int(bottom - top - head * 0.8))), 235, shaft // 2)
+        pts = [(ax, top), (ax - head * 0.62, top + head), (ax + head * 0.62, top + head)]
+        pygame.gfxdraw.filled_polygon(self.screen, pts, WHITE)
+        pygame.gfxdraw.aapolygon(self.screen, pts, WHITE)
+        # if the drawing had to move in from the edge, bend the arrow to it
+        if abs(cx - ax) > 2:
+            pygame.draw.line(self.screen, WHITE, (ax, bottom), (cx, bottom + self.S * 0.03), shaft)
+        self.arcade_hand(cx, H * 0.36 + u * 0.12, u, t, pressed, glow)
+
+    def arcade_hand(self, cx, top, u, t, pressed, glow):
+        """The little animation: a hand comes down and presses a red arcade button."""
+        cyc = (t % 1.6) / 1.6
+        if cyc < 0.35:
+            down = ease_out(cyc / 0.35)
+        elif cyc < 0.65:
+            down = 1.0
+        else:
+            down = 1 - ease_in((cyc - 0.65) / 0.35) if cyc < 1.0 else 0.0
+        push = 1.0 if pressed else max(0.0, min(1.0, (down - 0.85) / 0.15))   # cap goes in
+        base_y = top + u * 0.95                   # top of the housing ring
+        # glow behind the button: breathes with the real button's light, flares on a press
+        g = max(glow, push)
+        for k, a in ((1.0, 45), (0.78, 70), (0.6, 95)):
+            self.disc((255, 30, 30), (cx, base_y - u * 0.04), u * k * (0.8 + 0.25 * g),
+                      alpha=a * (0.35 + 0.65 * g))
+        # housing (dark cylinder)
+        hw, hh = u * 0.92, u * 0.30
+        body = pygame.Rect(int(cx - hw / 2), int(base_y), int(hw), int(u * 0.20))
+        pygame.draw.rect(self.screen, (32, 32, 36), body)
+        self._ellipse((32, 32, 36), cx, base_y + u * 0.20, hw, hh)
+        self._ellipse((70, 70, 78), cx, base_y, hw, hh)
+        self._ellipse((20, 20, 22), cx, base_y, hw * 0.80, hh * 0.80)
+        # red cap: a short cylinder with a domed top
+        cw, ch = u * 0.66, u * 0.22
+        cap_top = base_y - u * 0.14 + push * u * 0.09
+        red, dark_red = (int(200 + 55 * g), 28, 28), (150, 16, 16)
+        side = pygame.Rect(int(cx - cw / 2), int(cap_top), int(cw), int(base_y - cap_top))
+        pygame.draw.rect(self.screen, dark_red, side)
+        self._ellipse(dark_red, cx, base_y, cw, ch)
+        self._ellipse(red, cx, cap_top, cw, ch)
+        self._ellipse((255, 140, 140), cx - cw * 0.16, cap_top - ch * 0.12, cw * 0.32, ch * 0.30,
+                      alpha=150)
+        # hand (white cartoon glove), index finger pointing down at the cap
+        lift = (1 - down) * u * 0.38
+        tip_y = cap_top - ch * 0.15 - lift
+        fw = u * 0.17
+        finger = pygame.Rect(int(cx - fw / 2), int(tip_y - u * 0.42), int(fw), int(u * 0.42))
+        palm = pygame.Rect(int(cx - fw / 2 - u * 0.04), int(finger.top - u * 0.30),
+                           int(u * 0.48), int(u * 0.34))
+        cuff = pygame.Rect(palm.x + int(u * 0.04), palm.top - int(u * 0.14),
+                           palm.width - int(u * 0.06), int(u * 0.16))
+        line = (60, 60, 66)
+        glove = (246, 246, 246)
+        lw = max(2, int(u * 0.025))
+
+        def part(r_, rad):
+            pygame.draw.rect(self.screen, glove, r_, border_radius=int(rad))
+            pygame.draw.rect(self.screen, line, r_, lw, border_radius=int(rad))
+        part(finger, fw / 2)                  # finger first: the hand overlaps its root
+        part(palm, u * 0.12)
+        # folded fingers
+        for i in range(3):
+            y = palm.top + palm.height * (0.30 + 0.22 * i)
+            pygame.draw.line(self.screen, line, (finger.right + lw, y),
+                             (palm.right - u * 0.05, y), lw)
+        # cover the seam where the finger joins the hand
+        seam = pygame.Rect(finger.x + lw, palm.bottom - lw * 3, finger.width - 2 * lw, lw * 4)
+        pygame.draw.rect(self.screen, glove, seam)
+        part(pygame.Rect(palm.x - int(u * 0.07), palm.top + int(palm.height * 0.30),
+                         int(u * 0.20), int(u * 0.12)), u * 0.06)      # thumb
+        part(cuff, u * 0.03)
+
+    def _ellipse(self, colour, cx, cy, w, h, alpha=255):
+        rect = pygame.Rect(0, 0, max(2, int(w)), max(2, int(h)))
+        rect.center = (int(cx), int(cy))
+        if alpha >= 255:
+            pygame.gfxdraw.filled_ellipse(self.screen, rect.centerx, rect.centery,
+                                          rect.width // 2, rect.height // 2, colour)
+            pygame.gfxdraw.aaellipse(self.screen, rect.centerx, rect.centery,
+                                     rect.width // 2, rect.height // 2, colour)
+        else:
+            s = pygame.Surface(rect.size, pygame.SRCALPHA)
+            pygame.draw.ellipse(s, (*colour, int(alpha)), s.get_rect())
+            self.screen.blit(s, rect.topleft)
+
     # ------------------------------------------------------------ saving screen
     def fade(self, alpha):
         """Black over everything; alpha 0..255."""
@@ -395,13 +530,20 @@ class UI:
         f.set_alpha(int(min(255, alpha)))
         self.screen.blit(f, (0, 0))
 
-    def saving_screen(self, title, progress, hint, hold, ok=None, t=0.0):
+    def saving_screen(self, title, progress, hint, hold, ok=None, t=0.0,
+                      background=None, rect=None):
         """title, a loading bar (0..1), the delete hint and the delete-hold ring
-        (hold 0..1, or None). ok: None while saving, True/False when done."""
+        (hold 0..1, or None). ok: None while saving, True/False when done.
+        background: a frame of the recording to show behind it (dimmed)."""
         self.screen.fill((0, 0, 0))
         W, H = self.W, self.H
+        if background is not None:
+            rect = rect or self.screen.get_rect()
+            self.screen.blit(pygame.transform.smoothscale(background, rect.size), rect.topleft)
+            self.fade(115)
+        shadow = background is not None
         colour = WHITE if ok is not False else (255, 90, 90)
-        title_rect = self.blit_text(title, self.S * 0.095, colour, shadow=False,
+        title_rect = self.blit_text(title, self.S * 0.095, colour, shadow=shadow,
                                     center=(W / 2, H * 0.34))
         bw, bh = int(min(W * (0.62 if W > H else 0.82), self.S * 1.1)), max(10, int(self.S * 0.045))
         bar = pygame.Rect(0, 0, bw, bh)
@@ -421,8 +563,9 @@ class UI:
             self.check_mark((bar.right + bh * 1.4, bar.centery), bh * 0.9, GREEN)
         if hint:
             hy = H * 0.68
-            hc = (170, 170, 170) if hold is None else (255, 110, 110)
-            r = self.blit_text(hint, self.S * 0.05, hc, shadow=False, center=(W / 2, hy))
+            hc = ((225, 225, 225) if shadow else (170, 170, 170)) if hold is None \
+                else (255, 110, 110)
+            r = self.blit_text(hint, self.S * 0.05, hc, shadow=shadow, center=(W / 2, hy))
             if hold is not None:
                 c = (r.left - self.S * 0.055, hy)
                 self.ring((255, 80, 80), c, self.S * 0.032, self.px(5), alpha=70)

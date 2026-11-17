@@ -20,7 +20,8 @@ import pygame
 from . import devices, display, media, updater, video
 from .button import Button, uses_button, uses_touch
 from .camera import Camera
-from .led import Led
+from .highlights import Highlights
+from .led import Led, level
 from .recorder import Recorder
 from .storage import Storage
 from .ui import UI
@@ -68,6 +69,9 @@ class App:
                  f" (screen turned {self.screen_turn})" if self.screen_turn else "")
 
         self.ui = UI(self.screen, cfg)
+        # snippets of each recording, played behind the saving bar
+        self.highlights = Highlights(cfg["preview_fps"])
+        self._hl_seq = None
         self.button = Button(cfg)
         # the light lives in the physical button, so only drive it when that's in use
         self.led = Led(cfg if uses_button(cfg) else dict(cfg, led_pin=-1))
@@ -240,6 +244,15 @@ class App:
         elif self.state == "confirm":
             self.delete_clip()
 
+    @property
+    def black_idle(self):
+        """Physical button in use: wait on a black screen with the little hand
+        pointing at the real button, and switch the picture on like an old TV."""
+        return uses_button(self.cfg)
+
+    def _tvon(self):
+        return self.ui.TV_ON if self.black_idle else 0.0
+
     def _intro(self):
         """-> (countdown seconds, clapperboard?, seconds the open clapperboard is
         held first) from the start_animation setting."""
@@ -289,6 +302,7 @@ class App:
         if self.state not in ("recording", "countdown"):
             return
         self.frozen = self._freeze()
+        self.highlights.finish()
         self.clip = self.recorder.name
         self.save_done.clear()
         self.save_ok = False
@@ -404,15 +418,23 @@ class App:
         el = max(0.0, now - self.state_t)   # state may have changed after `now`
         if self.state == "countdown":
             n, clapper, lead = self._intro()
+            on = self._tvon()
             clap = self.ui.CLAP_AT + lead if clapper else 0.0
-            if el >= n + clap and self.recorder.action_at is None:
+            if el >= on + n + clap and self.recorder.action_at is None:
                 self.recorder.mark_action()
-                self.clapper_t0 = self.state_t + n
+                self.clapper_t0 = self.state_t + on + n
+                self.highlights.start()
+                self._hl_seq = None
                 self.set_state("recording")
             elif not self.recorder.alive:
                 log.error("recorder stopped during countdown:\n%s", self.recorder.ffmpeg_log())
                 self.stop_recording()
         elif self.state == "recording":
+            seq, frame = self.camera.latest()
+            if seq != self._hl_seq:
+                self._hl_seq = seq
+                self.highlights.add(frame, self.preview_size, self.recorder.elapsed(),
+                                    mirrored=bool(cfg["mirror_preview"]))
             if now - self._last_check > 1.0:
                 self._last_check = now
                 why = None
@@ -493,14 +515,19 @@ class App:
             if el < DELETED_SHOW:
                 ui.deleted(cfg["deleted_text"])
             else:
-                self._draw_camera(now)
+                self._draw_waiting(now)
                 ui.fade(255 * (1 - (el - DELETED_SHOW) / FADE))
         elif st == "done":
             if el < DONE_SHOW:
                 self._draw_saving(now, fade_in=99)
             else:
-                self._draw_camera(now)
+                self._draw_waiting(now)
                 ui.fade(255 * (1 - (el - DONE_SHOW) / FADE))
+        elif st == "idle" and self.black_idle and self.camera and self.camera.ok:
+            self._draw_waiting(now)
+        elif st == "countdown" and el < self._tvon():
+            self._draw_camera(now)
+            ui.tv_on(self.screen.copy(), el)
         else:
             self._draw_camera(now)
             pressed = self.press_t is not None
@@ -508,6 +535,7 @@ class App:
                 ui.idle(now, pressed)
             elif st == "countdown":
                 n, clapper, lead = self._intro()
+                el -= self._tvon()
                 if el < n:
                     ui.countdown(n - int(el), el % 1.0)
                 elif clapper:
@@ -545,6 +573,18 @@ class App:
                         or any(d.get("level") in ("error", "missing") for d in drives))
         return False
 
+    def _draw_waiting(self, now):
+        """What the booth shows while waiting for the next guest."""
+        if self.black_idle:
+            self.ui.press_hint(now, self.press_t is not None, self.cfg["button_hint_x"],
+                               glow=self.led_level("idle", now))
+        else:
+            self._draw_camera(now)
+
+    @staticmethod
+    def led_level(pattern, now):
+        return level(pattern, now)
+
     def _draw_camera(self, now):
         if self.camera is None or (not self.camera.ok and self.state not in ("countdown",
                                                                              "recording")):
@@ -565,8 +605,10 @@ class App:
         hold = None
         if self._hold_kind(now) == "delete":
             hold = min(1.0, (now - self.press_t) / cfg["delete_hold_seconds"])
+        clip = self.highlights.frame(now - self.review_t0)
         self.ui.saving_screen(title, 1.0 if finished else progress,
-                              None if finished else self.ui.word("delete_hint_text"), hold, ok, now)
+                              None if finished else self.ui.word("delete_hint_text"), hold, ok, now,
+                              background=clip, rect=self.preview_rect)
         if fade_in < FADE:
             self.ui.fade(255 * (1 - fade_in / FADE))
 
@@ -584,7 +626,8 @@ class App:
             pattern = "idle" if self.camera and self.camera.ok else "problem"
         elif st == "countdown":
             n, clapper, _ = self._intro()
-            pattern = "countdown" if now - self.state_t < n or not clapper else "action"
+            el = now - self.state_t - self._tvon()
+            pattern = "action" if el < 0 else "countdown" if el < n or not clapper else "action"
         elif st == "recording":
             pattern = "recording"
         elif st == "confirm":

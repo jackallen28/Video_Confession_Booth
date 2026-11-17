@@ -32,6 +32,7 @@ from . import media
 log = logging.getLogger("booth.storage")
 
 VIDEO_EXT = ".mp4"
+DELETED_DIR = "DELETED"     # guests' "deleted" clips are moved here, never erased
 PART_EXT = ".ts.part"       # while recording (MPEG-TS, survives power cuts)
 
 
@@ -240,11 +241,21 @@ class Storage:
         return int(self.cfg["low_free_mb"]) * 1_000_000
 
     def video_path(self, name):
-        """Path of the best copy to read (SSD first), or None."""
+        """Path of the best copy to read (SSD first), or None. Guest-deleted
+        clips are found in the DELETED folders."""
+        e = self.manifest.entry(name) or {}
         for d in self.drives:
-            if d.present and os.path.exists(d.path(name)):
-                return d.path(name)
+            if not d.present:
+                continue
+            p = self.deleted_path(d, name) if e.get("state") == "deleted" else d.path(name)
+            if os.path.exists(p):
+                return p
         return None
+
+    def deleted_names(self):
+        with self.manifest.lock:
+            return sorted(n for n, e in self.manifest.data["recordings"].items()
+                          if e.get("state") == "deleted")
 
     # ------------------------------------------------------------ lifecycle
     def start(self):
@@ -360,7 +371,8 @@ class Storage:
         self.queue(name)
 
     def delete(self, name):
-        """Guest deleted it: remove every copy from every drive."""
+        """Guest deleted it: move every copy into the DELETED folder on its drive.
+        Nothing is erased; it can be restored from the web page."""
         stem = name[:-len(VIDEO_EXT)]
         with self.manifest.lock:
             e = self.manifest.entry(name, create=True)
@@ -369,19 +381,54 @@ class Storage:
             e["copies"] = {}
             self.manifest.save()
         for d in self.drives:
-            if not d.present:
-                continue
-            for f in (name, stem + PART_EXT, stem + ".ts", name + ".tmp"):
-                try:
-                    os.remove(d.path(f))
-                    log.info("deleted %s from %s", f, d.name)
-                except FileNotFoundError:
-                    pass
-                except OSError as ex:
-                    log.error("could not delete %s on %s: %s", f, d.name, ex)
-            media.fsync_dir(d.video_dir)
+            if d.present:
+                for f in (name, stem + PART_EXT, stem + ".ts"):
+                    self._move(d, f, to_deleted=True)
         self.held.discard(name)
         self._write_sums()
+
+    def restore(self, name):
+        """Bring a guest-deleted clip back (web page)."""
+        e = self.manifest.entry(name)
+        if not e or e.get("state") != "deleted":
+            return False
+        found = False
+        for d in self.drives:
+            if d.present:
+                found |= self._move(d, name, to_deleted=False)
+        if not found:
+            return False
+        with self.manifest.lock:
+            e["state"] = "checking"
+            e["restored"] = time.strftime("%Y-%m-%d %H:%M:%S")
+            self.manifest.save()
+        log.warning("restored %s", name)
+        self.queue(name)
+        return True
+
+    def deleted_path(self, d, name):
+        return os.path.join(d.video_dir, DELETED_DIR, name)
+
+    def _move(self, d, f, to_deleted):
+        """Rename between the video folder and its DELETED folder (same drive,
+        so it's instant and can't lose data). Never overwrites anything."""
+        src = self.deleted_path(d, f) if not to_deleted else d.path(f)
+        dst = d.path(f) if not to_deleted else self.deleted_path(d, f)
+        if not os.path.exists(src):
+            return False
+        try:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if os.path.exists(dst):
+                base, ext = os.path.splitext(dst)
+                dst = f"{base}-{int(time.time())}{ext}"
+            os.replace(src, dst)
+            media.fsync_dir(os.path.dirname(dst))
+            media.fsync_dir(os.path.dirname(src))
+            log.info("%s %s on %s", "moved to DELETED:" if to_deleted else "restored:", f, d.name)
+            return True
+        except OSError as ex:
+            log.error("could not move %s on %s: %s", f, d.name, ex)
+            return False
 
     # ---------------------------------------------------------------- health
     def _health_loop(self):
@@ -620,7 +667,8 @@ class Storage:
                         log.info("found %s on %s, adding it", f, d.name)
                         self.manifest.entry(f, create=True)["found_on_drive"] = True
                     elif e.get("state") == "deleted":
-                        log.warning("%s was deleted by a guest but is on %s; leaving it", f, d.name)
+                        # e.g. the SSD was unplugged when the guest deleted it
+                        self._move(d, f, to_deleted=True)
         self.manifest.save()
         for name in self.manifest.names():
             if name in self.held:

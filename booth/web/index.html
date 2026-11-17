@@ -201,6 +201,12 @@
         to Files (Downloads); from there Share → Save Video puts it in Photos.</p>
     </div>
     <div class="card" id="vidList"></div>
+    <div class="card hide" id="delCard">
+      <h2>Deleted by guests</h2>
+      <p class="muted" style="margin:0 2px 8px">Clips guests deleted are kept in a DELETED folder on
+        each drive, never erased. Restore puts one back with the others.</p>
+      <div id="delList"></div>
+    </div>
   </section>
 
   <!-- ===================== SYSTEM ===================== -->
@@ -602,6 +608,7 @@ async function loadVideos() {
   const total = r.videos.reduce((a, v) => a + v.size, 0);
   $("#vidSummary").textContent = r.videos.length ? `${r.videos.length} video${r.videos.length > 1 ? "s" : ""} · ${total >= 1e9 ? (total / 1e9).toFixed(1) + " GB" : Math.max(1, Math.round(total / 1e6)) + " MB"}` : "No videos yet";
   $("#zipAll").classList.toggle("hide", !r.videos.length);
+  renderDeleted(r);
   const list = $("#vidList");
   if (!r.videos.length) { list.replaceChildren(el("p", {class: "muted"}, "Recordings will appear here.")); return; }
   const keep = new Set(r.videos.map(v => v.name));
@@ -614,6 +621,19 @@ async function loadVideos() {
     prev = fresh;
   }
   $$(":scope > :not(.vid)", list).forEach(n => n.remove());
+}
+function renderDeleted(r) {
+  const del = r.deleted || [];
+  $("#delCard").classList.toggle("hide", !del.length);
+  $("#delList").replaceChildren(...del.map(v => {
+    const row = vidRow(v);
+    $(".acts", row).append(el("button", {class: "btn small", onclick: async () => {
+      const x = await api("/api/videos/restore", {name: v.name}).catch(e => ({error: e.message}));
+      toast(x.ok ? "Restored" : (x.error || "Couldn't restore it"), !x.ok); loadVideos();
+    }}, "↩ Restore"));
+    $(".chip", row) && $(".chip", row).remove();
+    return row;
+  }));
 }
 function vidRow(v) {
   const u = encodeURIComponent(v.name);

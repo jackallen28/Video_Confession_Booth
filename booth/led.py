@@ -13,8 +13,8 @@ log = logging.getLogger("booth.led")
 def level(pattern, t, since=0.0):
     """Brightness 0..1 for a pattern at time t (seconds); since = when it started."""
     e = t - since
-    if pattern == "idle":            # slow breathing: "press me"
-        return 0.12 + 0.88 * (0.5 - 0.5 * math.cos(2 * math.pi * e / 2.2))
+    if pattern == "idle":            # slow fade fully on and off: "press me"
+        return 0.5 - 0.5 * math.cos(2 * math.pi * t / 2.2)
     if pattern == "countdown":       # flash on each number, fading
         return max(0.0, 1.0 - (e % 1.0) * 1.6)
     if pattern == "action":

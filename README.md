@@ -12,18 +12,29 @@ everything a press of the button does below ("hold" = keep a finger on the scree
 physical red button instead, or both, change **Screen → Start/stop with** on the web page (the
 booth restarts). The button's light is only used with the physical button.
 
-- **Idle:** live camera (mirrored like a mirror) with a slightly see-through red button and
-  `TAP TO RECORD` (`PRESS BUTTON TO RECORD` with the physical button, whose light slowly breathes).
-- **Press:** 3-2-1 film-leader countdown (the button flashes with each number), then recording
-  starts. Or, set on the web page (Screen → Before recording): a clapperboard snapping shut with
-  **ACTION!** instead, the countdown then the clapperboard, or nothing.
-- **Recording:** a small flashing red dot and the time. The button light flashes with the dot.
+![Physical button mode: waiting screen with the hand and arrow, TV switching on, recording, saving over snippets, hold to delete, saved](docs/button-mode.png)
+
+- **Waiting:**
+  - *Physical button:* a black screen with a little hand pressing a glowing red arcade button, and an
+    arrow pointing up at the real button (its position across the screen is set on the web page,
+    Screen → *Arrow to the button*; 0.86 matches the enclosure drawing). The button's light fades
+    fully on and off.
+  - *Touch screen:* the live camera (mirrored like a mirror) with a see-through red button and
+    `TAP TO RECORD`.
+- **Press:** with the physical button the screen **switches on like an old TV** (a dot, a bright
+  line, then the picture opens up). Then the 3-2-1 film-leader countdown (the button flashes with
+  each number), or (web page, Screen → Before recording) a clapperboard **ACTION!** instead, both,
+  or nothing.
+- **Recording:** the live picture with **● RECORDING 0:42** in the corner. The button flashes red
+  with the dot.
 - **Press again:** the picture switches off like an old TV (squashes to a line, then a dot), 2 s of
-  black, then **VIDEO SAVING** with a loading bar (at least 5 s) and
-  `HOLD THE SCREEN 3 SEC TO DELETE` (or `HOLD BUTTON...`). Then **VIDEO SAVED** ✓ and back to the camera.
+  black, then **VIDEO SAVING** with a loading bar (at least 10 s) over **snippets of the clip they
+  just recorded**, and `HOLD FOR 3 SECONDS TO DELETE` (`HOLD THE SCREEN 3 SEC...` with touch).
+  Then **VIDEO SAVED** ✓ and back to the waiting screen.
 - **Delete:** on the saving screen, hold the button for 3 s (a red ring fills, the light flickers
-  faster), let go, then tap/press once more within 6 s (`TAP AGAIN TO DELETE`, light blinking fast).
-  The clip is removed from both drives: **VIDEO DELETED**. Not pressed = kept.
+  faster), let go, then press/tap once more within 6 s (`PRESS AGAIN TO DELETE`, light blinking
+  fast): **VIDEO DELETED**. Not pressed = kept. "Deleted" clips are **moved to a `DELETED` folder**
+  on each drive, never erased; the web page lists them and can restore them.
 - **Free space:** nothing on screen normally. When a drive is nearly full (under 8 GB left), a bar
   comes up at the bottom with the free space on the SSD (box icon) and microSD (card icon)
   (see [Status bar](#status-bar)).
@@ -197,7 +208,8 @@ on your home network. It works with no internet. Tabs:
   and hold-to-shut-down times, and every word shown on the booth screen.
 - **Videos:** every recording with a thumbnail, length, size and whether it's verified on both
   drives. Tap to watch, **Download** one, or **Download all (.zip)**. On iPhone, downloads go to
-  Files → Downloads; Share → Save Video puts one in Photos.
+  Files → Downloads; Share → Save Video puts one in Photos. Below: **Deleted by guests**, with
+  Play, Download and **Restore**.
 - **System:** **set the booth's clock from your phone** (it has no clock battery), **software
   update** (see [Updating](#updating)), restart the booth, shut down safely (same as holding the
   button 30 s), and the log.
@@ -260,8 +272,9 @@ are in [`config.example.toml`](config.example.toml)); after changing them:
 
 - Each recording is written to the SSD and microSD at the same time, in a format that survives a
   power cut, then turned into MP4 and checked (below).
-- Nothing on the web page can delete a video; only the guest, straight after recording (hold +
-  press again), can.
+- Nothing erases a video. Nothing on the web page can delete one; a guest can "delete" theirs
+  straight after recording (hold + press again), which only moves it into the `DELETED` folder on
+  each drive (restore it from the web page).
 - Restarts for settings, a new screen or camera, and updates only happen when nobody is
   recording, saving or deciding whether to delete. Camera changes wait too.
 - If the booth is stopped anyway (`systemctl stop/restart`, a shutdown command, an update), it
