@@ -36,17 +36,18 @@ booth restarts). The button's light is only used with the physical button.
   just recorded**, and `HOLD BUTTON TO DELETE` (`HOLD THE SCREEN TO DELETE` with touch). The
   button gives a quick flash every 1.3 s so guests can see where it is.
   Then **VIDEO SAVED** ✓ and back to the waiting screen.
-- **Delete:** on the saving screen (`HOLD BUTTON TO DELETE`), hold the button for **6 seconds**
-  (a red ring fills, the light flickers faster): **VIDEO DELETED**, no second press needed (that
+- **Delete:** on the saving screen (`HOLD BUTTON TO DELETE`), hold the button: the saving bar and
+  clip stop, a red delete symbol flashes with a ring filling up, and the button light flickers
+  faster. After **6 seconds**: **VIDEO DELETED**, no second press needed (that
   can be switched back on: After recording → *press once more to confirm*). Not held = kept.
   "Deleted" clips are **moved to a `DELETED` folder** on each drive, never erased; the web page
   lists them and can restore them.
 - **Free space:** nothing on screen normally. When a drive is nearly full (under 8 GB left), a bar
   comes up at the bottom with the free space on the SSD (box icon) and microSD (card icon)
   (see [Status bar](#status-bar)).
-- **Hold the button for 30 s:** a ring fills up from 2 s; at 30 s the recording (if any) is saved,
+- **Hold the button for 15 s:** a ring fills up from 2 s; at 15 s the recording (if any) is saved,
   the SSD is unmounted and powered off (SSD icon turns green ✓), then the Pi shuts down.
-  Let go before 30 s to cancel.
+  Let go before 15 s to cancel.
 
 Starts by itself when the Pi is switched on. Recordings stop by themselves after 5 minutes.
 
@@ -230,7 +231,9 @@ on your home network. It works with no internet. Tabs:
   Play, Download and **Restore**.
 - **System:** **set the booth's clock from your phone** (it has no clock battery), **software
   update** (see [Updating](#updating)), restart the booth, shut down safely (same as holding the
-  button 30 s), and the log.
+  button 15 s), the log, and a **Danger zone** with **Wipe all videos**: type `DELETE` and confirm
+  to permanently delete every video on the SSD and the microSD (including the DELETED folders; other
+  files on the SSD are left alone). Only when nobody is recording; can't be undone.
 
 Settings are saved in `/etc/confession-booth/settings.json` and kept after a restart. Anyone who can
 reach the page can use it; to ask for a password, set `web_password = "..."` in
@@ -348,7 +351,7 @@ button light double-blinks (it also double-blinks when there's no camera).
 
 ## Shutting down
 
-Hold the button for **30 seconds**. The screen goes black with a power symbol and an SSD icon.
+Hold the button for **15 seconds**. The screen goes black with a power symbol and an SSD icon.
 When the SSD icon turns green with a ✓, the SSD is unmounted and powered off. The Pi then shuts
 down and the button light goes out. Wait for the Pi's green light to stop flashing before you
 unplug the power.

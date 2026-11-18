@@ -169,6 +169,46 @@ def test_ssd_first_then_sd():
         assert os.path.exists(st.sd.path(name2)), "never removed from the microSD"
 
 
+def test_wipe_all_videos():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp)
+        a = st.new_name()
+        record(st, a, [st.ssd, st.sd])
+        run_queue(st)
+        from unittest import mock
+        with mock.patch("booth.storage.time.strftime", return_value=a[:-4] + "b"):
+            b = st.new_name()
+        record(st, b, [st.ssd, st.sd], keep=False)
+        st.delete(b)                                   # in the DELETED folders
+        mine = os.path.join(st.ssd.video_dir, "my notes.txt")
+        open(mine, "w").write("not a video")
+        outside = os.path.join(cfg["ssd_mount"], "Holiday.mp4")   # outside the booth folder
+        open(outside, "w").write("x")
+        rep = st.wipe_all()
+        assert rep["files"] >= 4 and sorted(rep["drives"]) == ["sd", "ssd"], rep
+        for d in (st.ssd, st.sd):
+            left = [f for f in os.listdir(d.video_dir) if f != "my notes.txt"]
+            assert not left, left
+            assert not os.path.exists(os.path.join(d.video_dir, "DELETED"))
+        assert os.path.exists(mine) and os.path.exists(outside), "only the booth's videos"
+        assert st.manifest.names() == [] and st.deleted_names() == []
+        assert not st.wiping and not st.paused.is_set()
+        # recording works normally afterwards
+        c = st.new_name()
+        assert record(st, c, [st.ssd, st.sd])
+
+
+def test_wipe_with_ssd_unplugged_reports_it():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp)
+        a = st.new_name()
+        record(st, a, [st.ssd, st.sd])
+        os.rename(cfg["ssd_mount"], cfg["ssd_mount"] + "-away")
+        st.refresh()
+        rep = st.wipe_all()
+        assert rep["skipped"] == ["ssd"] and rep["drives"] == ["sd"], rep
+
+
 def test_names_are_timestamps_and_mp4():
     with tempfile.TemporaryDirectory() as tmp:
         cfg, st = setup(tmp)

@@ -225,6 +225,7 @@ class Storage:
         self.busy = False
         self.stopping = threading.Event()
         self.paused = threading.Event()      # software update: no new background jobs
+        self.wiping = False                  # "wipe all videos" in progress
         self._hlock = threading.Lock()       # health checks vs. eject
         self._ioerr = {}
         self._last = {"write": 0.0, "scrub": time.monotonic(), "smart": 0.0}
@@ -413,6 +414,78 @@ class Storage:
                     self._move(d, f, to_deleted=True)
         self.held.discard(name)
         self._write_sums()
+
+    @staticmethod
+    def _is_booth_file(f):
+        """Files the booth itself made in a video folder (nothing else is touched)."""
+        return (f.endswith((VIDEO_EXT, ".ts", ".part", ".tmp")) or ".mp4.bad-" in f
+                or f in ("SHA256SUMS", "booth-manifest.json", ".booth-health-check")
+                or f.startswith(".tmp-"))
+
+    def wipe_all(self, thumbs_dir=None):
+        """PERMANENTLY delete every video (and the DELETED folders) on every
+        connected drive. Only when nothing is being recorded. Returns a report."""
+        self.wiping = True
+        self.paused.set()
+        try:
+            end = time.monotonic() + 120
+            while self.busy and time.monotonic() < end:
+                time.sleep(0.2)                    # let the current check/copy finish
+            while True:                            # forget queued background jobs
+                try:
+                    self._q.get_nowait()
+                except queue.Empty:
+                    break
+            with self._plock:
+                self._pending.clear()
+            report = {"files": 0, "bytes": 0, "drives": [], "skipped": []}
+            with self._hlock:
+                for d in self.drives:
+                    if not d.present:
+                        report["skipped"].append(d.name)
+                        continue
+                    for folder in (os.path.join(d.video_dir, DELETED_DIR), d.video_dir):
+                        try:
+                            names = os.listdir(folder)
+                        except OSError:
+                            continue
+                        for f in names:
+                            p = os.path.join(folder, f)
+                            if not os.path.isfile(p) or not self._is_booth_file(f):
+                                continue
+                            if self.active_name and f.startswith(self.active_name[:-4]):
+                                continue           # never touch a recording in progress
+                            try:
+                                size = os.path.getsize(p)
+                                os.remove(p)
+                                report["files"] += 1
+                                report["bytes"] += size
+                            except OSError as ex:
+                                log.error("wipe: could not delete %s: %s", p, ex)
+                        media.fsync_dir(folder)
+                    try:
+                        os.rmdir(os.path.join(d.video_dir, DELETED_DIR))   # only if empty
+                    except OSError:
+                        pass
+                    report["drives"].append(d.name)
+                with self.manifest.lock:
+                    self.manifest.data["recordings"] = {}
+                    self.manifest.save()
+            if thumbs_dir and os.path.isdir(thumbs_dir):
+                shutil.rmtree(thumbs_dir, ignore_errors=True)
+            os.sync()
+            # tell the drives the space is free (SSDs and SD cards), where supported
+            if shutil.which("fstrim") and self.auto:
+                for d in self.drives:
+                    if d.present:
+                        run(["fstrim", os.path.dirname(d.video_dir) if d is self.ssd
+                             else "/"], timeout=120)
+            log.warning("WIPED all videos: %d files, %s (%s)", report["files"],
+                        media.human_bytes(report["bytes"]), ", ".join(report["drives"]))
+            return report
+        finally:
+            self.paused.clear()
+            self.wiping = False
 
     def restore(self, name):
         """Bring a guest-deleted clip back (web page)."""

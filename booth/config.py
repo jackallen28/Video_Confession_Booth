@@ -70,7 +70,7 @@ DEFAULTS = {
     "button_pull_up": True,
     "button_bounce": 0.05,
     "hold_feedback_after": 2.0,  # seconds before the shutdown ring appears
-    "hold_shutdown_seconds": 30,
+    "hold_shutdown_seconds": 15,
     # LED inside the button (through a transistor, see README). -1 = none.
     "led_pin": 27,
     "led_active_high": True,

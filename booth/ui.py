@@ -565,12 +565,26 @@ class UI:
             hy = H * 0.68
             hc = ((225, 225, 225) if shadow else (170, 170, 170)) if hold is None \
                 else (255, 110, 110)
-            r = self.blit_text(hint, self.S * 0.05, hc, shadow=shadow, center=(W / 2, hy))
-            if hold is not None:
-                c = (r.left - self.S * 0.055, hy)
-                self.ring((255, 80, 80), c, self.S * 0.032, self.px(5), alpha=70)
-                self.ring((255, 80, 80), c, self.S * 0.032, self.px(5), alpha=255, end=360 * hold)
+            if hold is None:
+                self.blit_text(hint, self.S * 0.05, hc, shadow=shadow, center=(W / 2, hy))
+        if hold is not None:
+            self.delete_hold(hold, t, hint)
         return title_rect
+
+    def delete_hold(self, hold, t, hint=None):
+        """Button held on the saving screen: everything stops and a red delete
+        symbol flashes, with a ring filling up until it's deleted."""
+        self.fade(150)
+        c = (self.W / 2, self.H * 0.45)
+        r = self.S * 0.16
+        flash = (t % 0.5) < 0.3
+        self.disc((0, 0, 0), (c[0], c[1] + self.px(4)), r * 1.2, alpha=120)
+        self.ring(WHITE, c, r * 1.18, self.px(8), alpha=70)
+        self.ring((255, 70, 70), c, r * 1.18, self.px(8), alpha=255, end=360 * max(0.0, hold))
+        self.disc((220, 30, 30) if flash else (120, 16, 16), c, r)
+        self.trash_icon(c, r * 1.05, WHITE if flash else (230, 170, 170))
+        if hint:
+            self.blit_text(hint, self.S * 0.06, (255, 120, 120), center=(self.W / 2, self.H * 0.8))
 
     def check_mark(self, c, size, colour):
         w = max(3, int(size * 0.18))

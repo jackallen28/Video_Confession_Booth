@@ -36,7 +36,7 @@
 # input = "touch"              # "touch" (tap the screen), "button" (physical button) or "both"
 # Physical button (BCM numbering): GPIO17 = pin 11, other leg to GND = pin 9
 # button_pin = 17
-# hold_shutdown_seconds = 30
+# hold_shutdown_seconds = 15
 # The light in the button (through a transistor, see README). -1 = no light.
 # led_pin = 27                 # pin 13
 # led_active_high = true

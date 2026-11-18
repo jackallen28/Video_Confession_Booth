@@ -248,6 +248,17 @@
         Same as holding the button.</span></span>
         <button class="btn small red" id="shutdownBtn">Shut down</button></div>
     </div>
+    <div class="card" style="border-color:#5a2022">
+      <h2 style="color:#ff8a8a">Danger zone</h2>
+      <div class="row" style="border:0;padding-top:0"><span class="k"><b>Wipe all videos</b>
+        <span class="help">Permanently deletes every video on the SSD and the microSD card,
+        including the guests' DELETED folders. This can't be undone - download anything you
+        want to keep first (Videos → Download all).</span></span></div>
+      <div class="row"><label for="wipeWord">Type DELETE to confirm</label>
+        <input type="text" id="wipeWord" autocomplete="off" autocapitalize="characters"
+          placeholder="DELETE"></div>
+      <button class="btn wide red" id="wipeBtn" disabled style="margin-top:8px">Wipe all videos</button>
+    </div>
     <div class="card">
       <h2>Log</h2>
       <pre id="log">…</pre>
@@ -446,6 +457,21 @@ async function loadLog() {
   const pre = $("#log"); pre.textContent = r.lines.join("\n"); pre.scrollTop = pre.scrollHeight;
 }
 $("#logBtn").addEventListener("click", loadLog);
+
+// ------------------------------------------------------------ wipe all videos
+$("#wipeWord").addEventListener("input", () => {
+  $("#wipeBtn").disabled = $("#wipeWord").value.trim() !== "DELETE";
+});
+$("#wipeBtn").addEventListener("click", async () => {
+  if ($("#wipeWord").value.trim() !== "DELETE") return;
+  if (!confirm("Permanently delete EVERY video on the SSD and microSD card (including the DELETED folders)? This can't be undone.")) return;
+  $("#wipeBtn").disabled = true; $("#wipeBtn").textContent = "Wiping…";
+  const r = await api("/api/videos/wipe", {confirm: "DELETE"}).catch(e => ({error: e.message}));
+  $("#wipeBtn").textContent = "Wipe all videos"; $("#wipeWord").value = "";
+  toast(r.ok ? r.message : (r.error || "Couldn't wipe"), !r.ok);
+  if (r.ok) alert(r.message);
+  poll();
+});
 
 // --------------------------------------------------------- software update
 async function loadUpdate() {

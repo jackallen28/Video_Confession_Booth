@@ -111,6 +111,8 @@ class App:
         self.web = Web(self)
         self.save_ok = False
         self.review_t0 = 0.0
+        self.bar_elapsed = 0.0       # saving bar time (stands still while held)
+        self.bar_last = 0.0
         self.frozen = None
         self.confirm_t0 = 0.0
 
@@ -280,6 +282,8 @@ class App:
 
     # ------------------------------------------------------------- recording
     def start_recording(self):
+        if self.storage.wiping:
+            return self._fail("wiping all videos")
         if not self.camera or not self.camera.ok:
             return self._fail("camera not ready")
         targets = self.storage.targets()
@@ -457,13 +461,19 @@ class App:
         elif self.state == "stopping":
             if el >= self.ui.TV_OFF + cfg["black_seconds"]:
                 self.review_t0 = now
+                self.bar_elapsed, self.bar_last = 0.0, now
                 self.set_state("review")
         elif self.state == "review":
-            if self.save_done.is_set() and now - self.review_t0 >= cfg["saving_min_seconds"] \
+            # the saving bar's own clock: it stands still while the button is held
+            if self._hold_kind(now) != "delete":
+                self.bar_elapsed += max(0.0, now - self.bar_last)
+            self.bar_last = now
+            if self.save_done.is_set() and self.bar_elapsed >= cfg["saving_min_seconds"] \
                     and self.press_t is None:
                 self.keep_clip()
                 self.set_state("done")
         elif self.state == "confirm":
+            self.bar_last = now                # the bar doesn't move while confirming
             if self.press_t is not None:
                 self.confirm_t0 = now          # still holding: the timer starts on release
             elif now - self.confirm_t0 > cfg["delete_confirm_seconds"]:
@@ -614,7 +624,7 @@ class App:
 
     def _draw_saving(self, now, fade_in):
         cfg = self.cfg
-        p = (now - self.review_t0) / cfg["saving_min_seconds"]
+        p = self.bar_elapsed / max(0.1, cfg["saving_min_seconds"])
         done = self.save_done.is_set()
         progress = min(p, 1.0) if done else min(p, 0.97)
         finished = self.state == "done"
@@ -624,9 +634,11 @@ class App:
         hold = None
         if self._hold_kind(now) == "delete":
             hold = min(1.0, (now - self.press_t) / cfg["delete_hold_seconds"])
-        clip = self.highlights.frame(now - self.review_t0)
+        # while the button is held, the bar and the clip snippets stand still
+        clip = self.highlights.frame(self.bar_elapsed)
         self.ui.saving_screen(title, 1.0 if finished else progress,
-                              None if finished else self.ui.word("delete_hint_text"), hold, ok, now,
+                              None if finished else self.ui.word("delete_hint_text"), hold, ok,
+                              now if hold is not None else self.bar_elapsed,
                               background=clip, rect=self.preview_rect)
         if fade_in < FADE:
             self.ui.fade(255 * (1 - fade_in / FADE))

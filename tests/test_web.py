@@ -125,6 +125,18 @@ def checks():
         with zipfile.ZipFile(io.BytesIO(z)) as zf:
             assert zf.namelist() == [name] and zf.read(name) == data
 
+        # wipe all videos: refused without DELETE, then everything gone
+        try:
+            post("/api/videos/wipe", {"confirm": "delete"})
+            raise AssertionError("wipe without DELETE was accepted")
+        except urllib.error.HTTPError as e:
+            assert e.code == 400
+        assert json.loads(get("/api/videos")[2])["videos"], "still there"
+        r = post("/api/videos/wipe", {"confirm": "DELETE"})
+        assert r["ok"] and r["files"] >= 1, r
+        v = json.loads(get("/api/videos")[2])
+        assert v["videos"] == [] and v["deleted"] == [] and not os.path.exists(path)
+
         # log, clock (test mode leaves the computer's clock alone)
         assert json.loads(get("/api/log")[2])["lines"]
         assert post("/api/action", {"action": "clock", "time": time.time()})["ok"]

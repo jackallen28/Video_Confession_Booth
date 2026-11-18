@@ -487,6 +487,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 ok, msg = devices.set_control(app.device, name, value)
                 web.save_control(name, value)
                 self._json({"ok": ok, "message": msg})
+            elif p == "/api/videos/wipe":
+                if body.get("confirm") != "DELETE":
+                    return self._json({"ok": False, "error": "Type DELETE to confirm."}, 400)
+                if app.state not in ("idle", "error", "starting") or app.press_t is not None \
+                        or app.storage.recording.is_set() or app.storage.held:
+                    return self._json({"ok": False, "error": "The booth is busy - try again "
+                                       "when nobody is recording or saving."})
+                log.warning("wipe all videos requested from the web page (%s)",
+                            self.address_string())
+                rep = app.storage.wipe_all(web.thumb_dir)
+                msg = f"Deleted {rep['files']} files ({media.human_bytes(rep['bytes'])})."
+                if rep["skipped"]:
+                    msg += " Not connected, so not wiped: " + ", ".join(
+                        "SSD" if n == "ssd" else "microSD" for n in rep["skipped"]) + "."
+                self._json({"ok": True, "message": msg, **rep})
             elif p == "/api/videos/restore":
                 name = str(body.get("name") or "")
                 ok = NAME_OK.match(name) is not None and app.storage.restore(name)
