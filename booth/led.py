@@ -21,8 +21,9 @@ def level(pattern, t, since=0.0):
         return 1.0
     if pattern == "recording":       # in step with the red dot on screen
         return 1.0 if (t % 1.0) < 0.6 else 0.0
-    if pattern == "saving":
-        return 0.0
+    if pattern == "saving":          # quick soft flash: "the button is here" (to delete)
+        p = e % 1.3
+        return math.sin(p / 0.3 * math.pi) if p < 0.3 else 0.0
     if pattern == "delete_hold":     # gets faster as the 3 s hold fills up
         return 1.0 if math.sin(e * (8 + 18 * min(1.0, e / 3))) > 0 else 0.0
     if pattern == "confirm":         # quick blink: press me again to delete

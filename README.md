@@ -32,7 +32,8 @@ booth restarts). The button's light is only used with the physical button.
   with the dot.
 - **Press again:** the picture switches off like an old TV (squashes to a line, then a dot), 2 s of
   black, then **VIDEO SAVING** with a loading bar (at least 10 s) over **snippets of the clip they
-  just recorded**, and `HOLD FOR 3 SECONDS TO DELETE` (`HOLD THE SCREEN 3 SEC...` with touch).
+  just recorded**, and `HOLD BUTTON TO DELETE` (`HOLD THE SCREEN TO DELETE` with touch). The
+  button gives a quick flash every 1.3 s so guests can see where it is.
   Then **VIDEO SAVED** ✓ and back to the waiting screen.
 - **Delete:** on the saving screen (`HOLD BUTTON TO DELETE`), hold the button for **6 seconds**
   (a red ring fills, the light flickers faster): **VIDEO DELETED**, no second press needed (that

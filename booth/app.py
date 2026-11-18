@@ -649,6 +649,8 @@ class App:
             pattern = "action" if el < 0 else "countdown" if el < n or not clapper else "action"
         elif st == "recording":
             pattern = "recording"
+        elif st == "review":
+            pattern = "saving"           # flash 0.3 s every 1.3 s while the saving bar shows
         elif st == "confirm":
             pattern = "confirm"
         elif st == "done":
