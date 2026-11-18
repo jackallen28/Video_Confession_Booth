@@ -247,22 +247,37 @@ class Updater:
         after = run(["systemctl", "show", "-p", "NRestarts", "--value", SERVICE])[1]
         if active and before == after:
             return "ok"
+        if not rollback_possible or not self.rollback():
+            return "not running"
+        run(["systemctl", "restart", SERVICE], timeout=60)
+        return "rolled back"
+
+    def program_id(self):
+        """Changes whenever install.sh swaps a new program in."""
+        try:
+            return os.stat(os.path.join(self.app_dir, "booth")).st_ino
+        except OSError:
+            return None
+
+    def rollback(self):
+        """Put the previous program back (kept as booth.prev by install.sh)."""
         app = self.app_dir
         prev = os.path.join(app, "booth.prev")
-        if not rollback_possible or not os.path.isdir(prev):
-            return "not running"
-        log.error("new version isn't running properly; going back to the previous one")
+        if not os.path.isdir(prev):
+            log.error("no previous version to go back to")
+            return False
+        log.error("going back to the previous version")
         bad = os.path.join(app, "booth.failed")
         shutil.rmtree(bad, ignore_errors=True)
-        os.replace(os.path.join(app, "booth"), bad)
+        if os.path.isdir(os.path.join(app, "booth")):
+            os.replace(os.path.join(app, "booth"), bad)
         os.replace(prev, os.path.join(app, "booth"))
         try:
             os.replace(os.path.join(app, "VERSION.prev"), os.path.join(app, "VERSION"))
         except OSError:
             pass
         os.sync()
-        run(["systemctl", "restart", SERVICE], timeout=60)
-        return "rolled back"
+        return True
 
     def go(self):
         self.status("working", "Starting the update")
@@ -279,6 +294,8 @@ class Updater:
         ap_was_on = self.ap_active()
         switched = False
         result, ok, installed = None, False, False
+        program_before = self.program_id()
+        version_before = installed_version(self.app_dir)
         try:
             if not self.online(src, owner):
                 hs = load_hotspot()
@@ -303,8 +320,11 @@ class Updater:
                 result = f"Updated {old} → {new}."
             ok = True
         except Exception as e:                    # noqa: BLE001 - always restore below
-            result = f"Update failed: {e}"
+            result = f"Update failed: {e}."
             log.exception("update failed")
+            # failed part-way through installing: put the previous version back
+            if self.program_id() != program_before and self.rollback():
+                result += f" The booth went back to the version it had ({version_before})."
         finally:
             if switched:
                 self.status("working", "Turning the booth Wi-Fi back on…")
@@ -312,11 +332,13 @@ class Updater:
         running = self.restart_and_check(src, rollback_possible=installed)
         if running == "rolled back":
             ok = False
-            result += " The new version didn't start, so the booth went back to the " \
-                      "previous version."
+            result = (f"Update failed: the new version didn't start, so the booth went back "
+                      f"to the version it had ({version_before}).")
         elif running != "ok":
             ok = False
             result += " The booth isn't running properly - see the log."
+        if not ok and not result.startswith("Update failed"):
+            result = "Update failed: " + result
         self.status("done" if ok else "failed", result,
                     version=installed_version(self.app_dir))
         return 0 if ok else 1

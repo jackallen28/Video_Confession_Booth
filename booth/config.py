@@ -86,8 +86,9 @@ DEFAULTS = {
     # After STOP: TV switch-off, black, then the "saving" screen with a bar.
     "black_seconds": 2.0,
     "saving_min_seconds": 10.0,  # the bar never fills faster than this
-    "delete_hold_seconds": 3.0,  # hold this long on the saving screen to delete
-    "delete_confirm_seconds": 6.0,  # then press again within this time
+    "delete_hold_seconds": 6.0,  # hold this long on the saving screen to delete
+    "delete_confirm": False,     # true: after the hold, press once more to confirm
+    "delete_confirm_seconds": 6.0,  # ...within this time
 
     # --- Storage ----------------------------------------------------------
     "sd_dir": "/srv/confessions",
@@ -116,6 +117,12 @@ DEFAULTS = {
     # Physical button: where the on-screen arrow points (0 = left edge of the
     # screen, 1 = right edge). 0.86 = the button hole in the enclosure drawing.
     "button_hint_x": 0.86,
+    # Physical button: the waiting screen. confessional, neon, spotlight,
+    # drama (reality-TV styles with "Press button to begin recording") or hand.
+    "waiting_theme": "confessional",
+    "waiting_title": "Press button",
+    "waiting_subtitle": "to begin recording",
+    "waiting_arrow": True,       # small arrow pointing up at the real button
     "fullscreen": True,
     # Screens bigger than this (e.g. a 1080p TV) are drawn at this size and
     # scaled up by the GPU, which keeps the booth smooth on a Pi 3B+.
@@ -127,11 +134,11 @@ DEFAULTS = {
     "recording_text": "RECORDING",
     "saved_text": "VIDEO SAVED",
     "failed_text": "VIDEO NOT SAVED",
-    "delete_hint_text": "HOLD FOR 3 SECONDS TO DELETE",
+    "delete_hint_text": "HOLD BUTTON TO DELETE",
     "delete_confirm_text": "PRESS AGAIN TO DELETE",
     # the same, when the touch screen is used
     "touch_idle_text": "TAP TO RECORD",
-    "touch_delete_hint_text": "HOLD THE SCREEN 3 SEC TO DELETE",
+    "touch_delete_hint_text": "HOLD THE SCREEN TO DELETE",
     "touch_delete_confirm_text": "TAP AGAIN TO DELETE",
     "deleted_text": "VIDEO DELETED",
 

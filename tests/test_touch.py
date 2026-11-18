@@ -95,13 +95,12 @@ run(seconds=1.2)
 tap()
 run(lambda: app.state == "review")
 deleted = app.clip
-# hold the screen 3 s, let go, tap again -> deleted
+# hold the screen 6 s -> deleted (no confirm), letting go afterwards does nothing
+assert app.ui.word("delete_hint_text") == "HOLD THE SCREEN TO DELETE"
 finger(True)
-run(lambda: app.state == "confirm", timeout=6)
-assert app.ui.word("delete_confirm_text") == "TAP AGAIN TO DELETE"
+run(lambda: app.state == "deleted", timeout=9)
 finger(False)
 run(seconds=0.3)
-tap()
 assert app.state == "deleted", app.state
 run(lambda: app.state == "idle")
 time.sleep(1)

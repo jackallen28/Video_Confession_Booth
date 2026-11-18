@@ -461,11 +461,15 @@ async function loadUpdate() {
     const when = new Date(st.time * 1000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
     const cls = st.state === "done" ? "banner info" : st.state === "failed" ? "banner bad" : "banner warn";
     box.className = cls;
-    box.replaceChildren(el("div", {}, el("b", {}, st.state === "working" ? "Updating… " : ""),
-      st.message, el("span", {class: "muted"}, "  (" + when + ")")));
+    const head = st.state === "working" ? "Updating… " : st.state === "done" ? "✓ " : "";
+    box.replaceChildren(el("div", {}, el("b", {}, head), st.message,
+      el("span", {class: "muted"}, "  (" + when + ")"),
+      st.state === "failed" ? el("div", {class: "muted", style: "margin-top:4px"},
+        "The booth Wi-Fi is back and nothing was lost. Check the hotspot is on, then tap Try again.") : null));
   } else box.className = "hide";
   $("#upStart").disabled = r.booth_state !== "idle" && r.booth_state !== "error";
-  $("#upStart").textContent = r.booth_state === "updating" ? "Updating…" : "Update now";
+  $("#upStart").textContent = r.booth_state === "updating" ? "Updating…"
+    : st && st.state === "failed" && Date.now() / 1000 - st.time < 3 * 3600 ? "Try again" : "Update now";
 }
 $("#hsSave").addEventListener("click", async () => {
   const name = $("#hsName").value.trim();
@@ -491,6 +495,8 @@ const LABELS = {max: "Best available (auto)", when_full: "When nearly full",
   "start_animation:none": "Nothing (record straight away)",
   "input:touch": "Touch screen", "input:button": "Physical button", "input:both": "Touch screen or button",
   landscape: "Landscape", portrait: "Portrait",
+  confessional: "Confessional (pink bokeh)", neon: "Neon sign", spotlight: "Spotlight",
+  drama: "Drama (sunburst)", hand: "Hand pressing a button",
   "picture_rotation:right": "Turn right ↻", "picture_rotation:left": "Turn left ↺",
   "picture_rotation:crop": "Camera not turned (use the middle)",
   "screen_rotation:right": "Turn right ↻", "screen_rotation:left": "Turn left ↺",

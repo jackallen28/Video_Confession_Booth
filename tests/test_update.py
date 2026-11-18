@@ -76,7 +76,7 @@ def git(*a, cwd=None):
                           check=True, capture_output=True, text=True).stdout.strip()
 
 
-def make_repos(tag):
+def make_repos(tag, fail_install=False):
     """origin (bare) + a clone like ~/Video_Confession_Booth, then a new commit
     on origin so there is something to update."""
     base = os.path.join(ROOT, tag)
@@ -94,6 +94,9 @@ def make_repos(tag):
     git("clone", "-q", origin, src)
     with open(os.path.join(work, "new.txt"), "w") as f:
         f.write("v2")
+    if fail_install:          # the new version's installer breaks after swapping in
+        with open(os.path.join(work, "install.sh"), "a") as f:
+            f.write("echo broken >&2\nexit 1\n")
     git("add", ".", cwd=work)
     git("commit", "-qm", "v2", cwd=work)
     git("push", "-q", "origin", "HEAD:main", cwd=work)
@@ -188,8 +191,25 @@ updater.run = crashing_run
 assert u.go() == 1
 updater.run = real_run
 assert os.path.exists(os.path.join(u.app_dir, "booth", "old-version")), "previous version back"
-assert "went back to the previous version" in result(cfg)["message"]
+assert "Update failed" in result(cfg)["message"] and "went back to the version it had" in result(cfg)["message"]
 print("ok  new version failing: previous version restored")
+
+# --- 4b. install fails part-way (via the hotspot): old version back, booth Wi-Fi back,
+#         "Update failed" shown, and trying again works once fixed
+updater.save_hotspot("Jack's iPhone", "secret123")
+src, newest = make_repos("halfway", fail_install=True)
+u, cfg = new_updater("halfway", src, online_after_hotspot=True)
+os.makedirs(os.path.join(u.app_dir, "booth"))
+open(os.path.join(u.app_dir, "booth", "old-version"), "w").close()
+open(os.path.join(u.app_dir, "VERSION"), "w").write("old")
+fresh()
+assert u.go() == 1
+r = result(cfg)
+assert r["state"] == "failed" and r["message"].startswith("Update failed"), r
+assert "went back to the version it had (old)" in r["message"], r
+assert os.path.exists(os.path.join(u.app_dir, "booth", "old-version")), "old version back"
+assert calls().rindex("connection up booth-ap") > calls().rindex("connection up booth-update-hotspot")
+print("ok  install failing part-way: old version back, booth Wi-Fi back, 'Update failed'")
 
 # --- 5. hotspot settings
 for bad in (("", "x" * 8), ("a" * 33, "x" * 8), ("ok", "short")):

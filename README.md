@@ -15,10 +15,13 @@ booth restarts). The button's light is only used with the physical button.
 ![Physical button mode: waiting screen with the hand and arrow, TV switching on, recording, saving over snippets, hold to delete, saved](docs/button-mode.png)
 
 - **Waiting:**
-  - *Physical button:* a black screen with a little hand pressing a glowing red arcade button, and an
-    arrow pointing up at the real button (its position across the screen is set on the web page,
-    Screen → *Arrow to the button*; 0.86 matches the enclosure drawing). The button's light fades
-    fully on and off.
+  - ![Waiting screens: Confessional (default), Neon sign, Spotlight](docs/waiting-screens.png)
+  - *Physical button:* a reality-TV style screen saying **"Press button to begin recording"** with
+    a bouncing arrow pointing up at the real button. Choose the style on the web page (Screen →
+    *Waiting screen*): **Confessional** (glowing pink bokeh, the default), **Neon sign**,
+    **Spotlight**, **Drama** (spinning sunburst), or a little **hand** pressing an arcade button.
+    The words can be changed too. The arrow's position across the screen is Screen → *Arrow to
+    the button* (0.86 matches the enclosure drawing). The button's light fades fully on and off.
   - *Touch screen:* the live camera (mirrored like a mirror) with a see-through red button and
     `TAP TO RECORD`.
 - **Press:** with the physical button the screen **switches on like an old TV** (a dot, a bright
@@ -31,10 +34,11 @@ booth restarts). The button's light is only used with the physical button.
   black, then **VIDEO SAVING** with a loading bar (at least 10 s) over **snippets of the clip they
   just recorded**, and `HOLD FOR 3 SECONDS TO DELETE` (`HOLD THE SCREEN 3 SEC...` with touch).
   Then **VIDEO SAVED** ✓ and back to the waiting screen.
-- **Delete:** on the saving screen, hold the button for 3 s (a red ring fills, the light flickers
-  faster), let go, then press/tap once more within 6 s (`PRESS AGAIN TO DELETE`, light blinking
-  fast): **VIDEO DELETED**. Not pressed = kept. "Deleted" clips are **moved to a `DELETED` folder**
-  on each drive, never erased; the web page lists them and can restore them.
+- **Delete:** on the saving screen (`HOLD BUTTON TO DELETE`), hold the button for **6 seconds**
+  (a red ring fills, the light flickers faster): **VIDEO DELETED**, no second press needed (that
+  can be switched back on: After recording → *press once more to confirm*). Not held = kept.
+  "Deleted" clips are **moved to a `DELETED` folder** on each drive, never erased; the web page
+  lists them and can restore them.
 - **Free space:** nothing on screen normally. When a drive is nearly full (under 8 GB left), a bar
   comes up at the bottom with the free space on the SSD (box icon) and microSD (card icon)
   (see [Status bar](#status-bar)).
@@ -129,8 +133,11 @@ that screen), and tap **Update now**. The booth:
    cable, it skips this);
 3. downloads the new version and installs it (system packages only if one is missing, to save
    mobile data);
-4. turns its own Wi-Fi back on (always, even if something went wrong) and restarts. If the new
-   version doesn't keep running, it goes back to the previous one by itself.
+4. turns its own Wi-Fi back on (always, even if something went wrong) and restarts. If anything
+   fails (no hotspot, download or install error, or the new version doesn't keep running) it goes
+   back to the version it had, the System tab says **Update failed** and why, and the button
+   becomes **Try again**. If the updater itself got stuck, the booth carries on by itself after
+   45 minutes.
 
 After 2–5 minutes rejoin the booth Wi-Fi and open the page: System shows the result and version.
 `sudo booth-update` over SSH does the same.

@@ -36,7 +36,8 @@ fi
 
 echo "== Checking packages"
 NEEDED="ffmpeg python3-pygame python3-gpiozero v4l-utils alsa-utils exfatprogs util-linux fonts-dejavu-core dnsmasq-base iw git"
-OPTIONAL="python3-lgpio smartmontools ntfs-3g"
+# fonts for the reality-TV waiting screens (falls back to a plain font without them)
+OPTIONAL="python3-lgpio smartmontools ntfs-3g fonts-lobster fonts-bebas-neue fonts-montserrat"
 missing() { for p in "$@"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "ok installed" || echo "$p"; done; }
 # shellcheck disable=SC2086
 MISS=$(missing $NEEDED)

@@ -17,7 +17,7 @@ import time
 
 import pygame
 
-from . import devices, display, media, updater, video
+from . import devices, display, media, themes, updater, video
 from .button import Button, uses_button, uses_touch
 from .camera import Camera
 from .highlights import Highlights
@@ -69,6 +69,7 @@ class App:
                  f" (screen turned {self.screen_turn})" if self.screen_turn else "")
 
         self.ui = UI(self.screen, cfg)
+        self.waiting = themes.WaitingScreen(self.screen, cfg)
         # snippets of each recording, played behind the saving bar
         self.highlights = Highlights(cfg["preview_fps"])
         self._hl_seq = None
@@ -232,8 +233,12 @@ class App:
                 self.press_t = None
                 self.start_shutdown()
             elif self.state == "review" and held >= self.cfg["delete_hold_seconds"]:
-                self.set_state("confirm")
-                self.confirm_t0 = now
+                if self.cfg["delete_confirm"]:
+                    self.set_state("confirm")
+                    self.confirm_t0 = now
+                else:
+                    self.press_t = None      # this hold is used up; letting go does nothing
+                    self.delete_clip()
 
     def on_press(self):
         if self.state in ("idle", "error"):
@@ -476,6 +481,17 @@ class App:
             elif self.save_done.is_set() and self.state not in ("stopping",) and self.running:
                 log.warning("stopping (recordings saved)")
                 self.running = False
+        if self.state == "updating" and el > 45 * 60:
+            # the updater should have restarted the booth long ago: carry on as before
+            log.error("update didn't finish; resuming")
+            try:
+                media.write_atomic(os.path.join(self.log_dir, "update.json"), json.dumps({
+                    "state": "failed", "time": time.time(),
+                    "message": "Update failed: it didn't finish. Try again.", "steps": []}))
+            except OSError:
+                pass
+            self.storage.paused.clear()
+            self.set_state("idle")
         if self.camera_restart_wanted and self.state == "idle" and self.camera:
             self.camera_restart_wanted = False
             self.camera.restart()
@@ -575,7 +591,10 @@ class App:
 
     def _draw_waiting(self, now):
         """What the booth shows while waiting for the next guest."""
-        if self.black_idle:
+        theme = self.cfg["waiting_theme"]
+        if self.black_idle and theme in themes.THEMES and theme != "hand":
+            self.waiting.draw(now, theme, self.cfg["button_hint_x"], self.led_level("idle", now))
+        elif self.black_idle:
             self.ui.press_hint(now, self.press_t is not None, self.cfg["button_hint_x"],
                                glow=self.led_level("idle", now))
         else:

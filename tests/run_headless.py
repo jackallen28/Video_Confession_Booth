@@ -112,13 +112,10 @@ press()
 run(until=state("recording")); run(2.0)
 press()
 run(until=state("review")); run(0.6)
-app.button.key(True)
-run(1.5); shot("12_delete_hold")
-run(until=state("confirm")); run(0.3); shot("13_confirm")
-app.button.key(False); step()
-run(0.5)
-press()
-run(0.3); shot("14_deleted")
+app.button.key(True)                       # hold 6 s: deleted, no confirm press
+run(3.0); shot("12_delete_hold")
+run(until=state("deleted"), timeout=10); run(0.3); shot("14_deleted")
+app.button.key(False); step()              # letting go afterwards does nothing
 run(until=state("idle"))
 
 # ---- wait for the background checks, then hold to shut down
