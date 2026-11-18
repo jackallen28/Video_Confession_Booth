@@ -285,10 +285,37 @@ class Storage:
                 "undervolt": self.undervolt}
 
     # --------------------------------------------------------- recording io
+    @property
+    def ssd_first(self):
+        """storage_mode "ssd_first": each video on the SSD only, the microSD
+        used when the SSD is full or missing. "both": every video on both."""
+        return self.cfg.get("storage_mode", "ssd_first") == "ssd_first"
+
     def targets(self):
-        """Where the next recording goes: every healthy drive with room."""
+        """Where the next recording goes."""
         with self._hlock:
-            return {d.name: d for d in self.drives if d.usable(self.min_free)}
+            usable = {d.name: d for d in self.drives if d.usable(self.min_free)}
+        if self.ssd_first:
+            for n in ("ssd", "sd"):
+                if n in usable:
+                    return {n: usable[n]}
+            return {}
+        return usable
+
+    def has_room(self, names):
+        """Is a recording going to these drives still OK? Stops (and saves)
+        a recording before its drive is completely full."""
+        with self._hlock:
+            return any(d.present and not d.errors and (d.free or 0) > self.min_free / 2
+                       for d in self.drives if d.name in names)
+
+    def _copy_wanted(self, d, name, copies):
+        """Should drive d hold a copy of this video?"""
+        if not self.ssd_first:
+            return True
+        # SSD first: everything ends up on the SSD where possible; a copy that is
+        # on the microSD (SSD was full or unplugged) stays there too.
+        return d is self.ssd or d.name in copies or os.path.exists(d.path(name))
 
     def new_name(self):
         """Just the date and time, e.g. 2026-11-11_21-04-33.mp4 (a _2 is added
@@ -676,7 +703,9 @@ class Storage:
             e = self.manifest.entry(name)
             for d in self.drives:
                 c = e["copies"].get(d.name, {})
-                if d.present and (c.get("status") != "verified" or not os.path.exists(d.path(name))):
+                have = {k: v for k, v in e["copies"].items() if v.get("status") != "missing"}
+                if d.present and self._copy_wanted(d, name, have) and \
+                        (c.get("status") != "verified" or not os.path.exists(d.path(name))):
                     self.queue(name)
                     break
 
@@ -778,6 +807,9 @@ class Storage:
             src = self._drive(ref).path(name)
             for d in present:
                 c = copies.get(d.name, {})
+                if not self._copy_wanted(d, name, {k: v for k, v in copies.items()
+                                                   if v.get("status") != "missing"}):
+                    continue
                 if c.get("status") == "verified" or \
                         not d.usable(self.min_free + copies[ref].get("size", 0)):
                     continue
@@ -805,6 +837,8 @@ class Storage:
         expected = [d.name for d in self.drives if d.present]
         if not verified:
             e["state"] = "damaged"
+        elif self.ssd_first:
+            e["state"] = "safe"          # saved and checked (one copy by design)
         elif all(k in verified for k in expected) and len(verified) == len(self.drives):
             e["state"] = "safe"          # verified on both drives
         else:

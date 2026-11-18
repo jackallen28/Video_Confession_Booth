@@ -35,6 +35,10 @@ FIELDS = [
          options=TS_FORMATS, apply="live"),
     dict(key="timestamp_size", group="Recording", label="Date/time size", type="select",
          options=["small", "medium", "large"], apply="live"),
+    dict(key="storage_mode", group="Recording", label="Where videos are saved", type="select",
+         options=["ssd_first", "both"], apply="live",
+         help="SSD first: SSD, then the microSD when the SSD is full. Both: a copy on each "
+              "(a backup, but half the space)"),
     dict(key="max_record_seconds", group="Recording", label="Longest recording (seconds)",
          type="int", min=10, max=1800, apply="live"),
     dict(key="av_offset", group="Recording", label="Sound/picture sync (seconds)", type="float",

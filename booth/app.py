@@ -449,8 +449,8 @@ class App:
                     why = "recorder stopped"
                 elif not self.camera.ok:
                     why = "camera lost"
-                elif not self.storage.targets():
-                    why = "drives full or failed"
+                elif not self.storage.has_room(self.recorder.parts):
+                    why = "drive full or failed"
                 if why:
                     log.warning("stopping recording: %s", why)
                     self.stop_recording()

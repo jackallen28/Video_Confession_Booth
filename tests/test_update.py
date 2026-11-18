@@ -290,6 +290,29 @@ app.events.put(("update_failed", "test"))
 run(lambda: app.state == "idle")
 assert not app.storage.paused.is_set()
 
+# SSD filling up mid-recording: stopped and saved before it's full; next one on the microSD
+assert app.storage.ssd_first and list(app.storage.targets()) == ["ssd"]
+press()
+run(lambda: app.state == "recording")
+run(lambda: app.recorder.elapsed() > 1.2)
+full_name = app.recorder.name
+real_refresh = app.storage.refresh
+app.storage.refresh = lambda first=False: None      # keep the fake "full" reading
+app.storage.ssd.free = 1
+run(lambda: app.state in ("stopping", "review"), timeout=5)
+run(lambda: app.state == "idle", timeout=60)
+assert media.probe(app.storage.ssd.path(full_name))["ok"], "recording saved, not cut off"
+assert list(app.storage.targets()) == ["sd"]
+press()
+run(lambda: app.state == "recording")
+assert list(app.recorder.parts) == ["sd"], app.recorder.parts
+run(lambda: app.recorder.elapsed() > 1.0)
+press()
+run(lambda: app.state == "idle", timeout=60)
+app.storage.refresh = real_refresh
+app.storage.refresh()
+print("ok  SSD full mid-recording: saved, then the microSD is used")
+
 # being stopped mid-recording: the recording is saved first
 press()
 run(lambda: app.state == "recording")
@@ -298,7 +321,8 @@ name = app.recorder.name
 app.term_requested = True
 run(lambda: not app.running, timeout=60)
 e = app.storage.manifest.entry(name)
-paths = [d.path(name) for d in app.storage.drives]
+paths = [d.path(name) for d in app.storage.drives if d.name in e["recorded_to"]]
+assert paths
 assert e and all(media.probe(p)["ok"] for p in paths), (e, paths)
 print("ok  stopped mid-recording: the recording was saved first")
 

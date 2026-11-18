@@ -134,9 +134,12 @@ assert len(recs) == 2, recs
 for name, e in recs.items():
     if name in kept:
         assert e["state"] == "safe", e
-        for d in ("ssd/Confessions", "sd"):
+        drives = ("ssd/Confessions", "sd") if cfg["storage_mode"] == "both" else ("ssd/Confessions",)
+        for d in drives:
             p = media.probe(os.path.join(data, d, name))
             assert p["ok"] and p["audio"], p
+        if cfg["storage_mode"] == "ssd_first":
+            assert not os.path.exists(os.path.join(data, "sd", name)), "SSD only"
     else:
         assert e["state"] == "deleted", e
         for d in ("ssd/Confessions", "sd"):

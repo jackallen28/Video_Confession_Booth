@@ -92,6 +92,10 @@ DEFAULTS = {
 
     # --- Storage ----------------------------------------------------------
     "sd_dir": "/srv/confessions",
+    # "ssd_first": each video on the SSD; the microSD is used when the SSD is
+    # full (or unplugged). "both": every video on both drives (a backup copy,
+    # half the space).
+    "storage_mode": "ssd_first",
     # "auto": the program finds and mounts the USB SSD itself (and remounts it
     # if it is unplugged and plugged back in). "directory": ssd_mount is just a
     # folder that is already there (fstab mounts, or testing).

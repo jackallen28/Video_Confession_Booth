@@ -495,6 +495,7 @@ const LABELS = {max: "Best available (auto)", when_full: "When nearly full",
   "start_animation:none": "Nothing (record straight away)",
   "input:touch": "Touch screen", "input:button": "Physical button", "input:both": "Touch screen or button",
   landscape: "Landscape", portrait: "Portrait",
+  ssd_first: "SSD first, then microSD", both: "Both drives (backup copy)",
   confessional: "Confessional (pink bokeh)", neon: "Neon sign", spotlight: "Spotlight",
   drama: "Drama (sunburst)", hand: "Hand pressing a button",
   "picture_rotation:right": "Turn right ↻", "picture_rotation:left": "Turn left ↺",
@@ -643,7 +644,8 @@ function renderDeleted(r) {
 }
 function vidRow(v) {
   const u = encodeURIComponent(v.name);
-  const chip = v.state === "safe" ? el("span", {class: "chip safe"}, "✓ both drives")
+  const where = (v.on || []).map(d => d === "ssd" ? "SSD" : "microSD").join(" + ");
+  const chip = v.state === "safe" ? el("span", {class: "chip safe"}, "✓ " + (where || "saved"))
     : v.state === "one_copy" ? el("span", {class: "chip one"}, "1 drive")
     : v.state === "damaged" ? el("span", {class: "chip bad"}, "check log")
     : el("span", {class: "chip"}, "checking");

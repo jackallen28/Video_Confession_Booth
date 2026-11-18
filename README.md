@@ -2,7 +2,8 @@
 
 A reality-TV "confession booth" for a party. Guests step in front of the webcam, tap the touch
 screen (or press a big red button, if you fit one), get a 3-2-1 countdown, say their piece, and
-tap again to stop. Every clip is saved as an MP4 to an external SSD **and** the microSD card, then checked.
+tap again to stop. Every clip is saved as an MP4 to an external SSD (then the microSD card once
+the SSD is full), and checked.
 
 ![Screens: idle, countdown, recording, TV switch-off, saving, hold to delete, confirm delete, saved, nearly-full warning](docs/screens.png)
 *(Screenshots from the built-in test picture. On the booth it's the live camera.)*
@@ -185,10 +186,19 @@ timestamp on, if it's on) and the biggest one that runs comfortably faster than 
 You can pick a fixed size on the web page (Camera tab) instead; the Booth tab shows what is
 being recorded now.
 
-Each recording is written to **both drives at the same time** by one ffmpeg process, so if a guest
-knocks the SSD cable out mid-recording the microSD copy keeps going (and the other way round). If
-the SSD isn't there at all, recording carries on to the microSD alone and the clips are copied to
-the SSD when it comes back. Roughly 4–5 GB per hour of recording at 1080p.
+**Where videos go** (web page → Camera → *Where videos are saved*):
+
+- **SSD first, then microSD** (default): each video is saved on the SSD. When the SSD has less
+  than 1 GB left, new recordings go to the microSD card instead. A recording that's going on when
+  the SSD fills up is stopped and saved properly first (never cut off by a full drive). If the SSD
+  is unplugged, recordings go to the microSD, and are copied onto the SSD when it's back (if it has
+  room), so everything ends up on the SSD where possible. Each video is one copy (checked), so
+  there is no backup copy.
+- **Both drives:** every video is written to both drives at the same time, so there's always a
+  backup copy (half the space). If a guest knocks the SSD cable out mid-recording, the microSD copy
+  keeps going (and the other way round).
+
+Roughly 4–5 GB per hour of recording at 1080p.
 
 ## The web page (control it from your phone)
 
@@ -278,8 +288,9 @@ are in [`config.example.toml`](config.example.toml)); after changing them:
 
 ## Keeping the videos safe
 
-- Each recording is written to the SSD and microSD at the same time, in a format that survives a
-  power cut, then turned into MP4 and checked (below).
+- Each recording is written in a format that survives a power cut, then turned into MP4 and
+  checked (below). With *Both drives* it's on the SSD and microSD at the same time; with *SSD
+  first* it's one copy, and a recording is stopped and saved before its drive is full.
 - Nothing erases a video. Nothing on the web page can delete one; a guest can "delete" theirs
   straight after recording (hold + press again), which only moves it into the `DELETED` folder on
   each drive (restore it from the web page).

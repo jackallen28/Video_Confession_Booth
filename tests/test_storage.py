@@ -25,9 +25,9 @@ def make_video(path, seconds=2):
                     "-f", "mpegts", path], check=True)
 
 
-def setup(tmp):
+def setup(tmp, mode="both"):
     cfg = config.load(overrides=dict(config.dev_overrides(tmp), min_free_mb=1,
-                                     health_interval=3600))
+                                     health_interval=3600, storage_mode=mode))
     os.makedirs(cfg["ssd_mount"], exist_ok=True)
     st = Storage(cfg)
     os.makedirs(st.sd.video_dir, exist_ok=True)
@@ -138,6 +138,35 @@ def test_unfinished_copies_cleaned_only_if_safe():
         st._reconcile()
         assert not os.path.exists(junk), "half copy of a saved video removed"
         assert os.path.exists(lonely), "never delete the only data"
+
+
+def test_ssd_first_then_sd():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp, mode="ssd_first")
+        assert list(st.targets()) == ["ssd"], "SSD only while it has room"
+        name = st.new_name()
+        record(st, name, [st.ssd])
+        run_queue(st)
+        assert st.manifest.entry(name)["state"] == "safe"
+        assert not os.path.exists(st.sd.path(name)), "no second copy on the microSD"
+        st._reconcile()
+        assert st._q.empty(), "nothing to mirror"
+
+        st.ssd.free = 1                      # SSD full -> microSD
+        assert list(st.targets()) == ["sd"]
+        assert not st.has_room(["ssd"]), "a recording on the full SSD is stopped and saved"
+        assert st.has_room(["sd"])
+        name2 = st.new_name() if st.new_name() != name else name[:-4] + "_2.mp4"
+        record(st, name2, [st.sd])
+        run_queue(st)                        # SSD still full: stays on the microSD only
+        assert st.manifest.entry(name2)["state"] == "safe"
+        assert not os.path.exists(st.ssd.path(name2))
+
+        st.refresh()                         # room on the SSD again (e.g. emptied)
+        st._reconcile()
+        run_queue(st)                        # microSD clip copied onto the SSD
+        assert media.sha256_file(st.ssd.path(name2)) == media.sha256_file(st.sd.path(name2))
+        assert os.path.exists(st.sd.path(name2)), "never removed from the microSD"
 
 
 def test_names_are_timestamps_and_mp4():
