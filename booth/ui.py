@@ -182,13 +182,37 @@ class UI:
         self.blit_text(self.word("idle_text"), self.S * 0.06, WHITE,
                        midtop=(cx, cy + r + self.S * 0.03))
 
-    def hold(self, progress):
-        c = (self.W / 2, self.H / 2 - self.sb / 2)
+    def hold(self, progress, drives=None):
+        """Hold-to-power-off ring; drives: rows for the panel underneath
+        [(kind, name, status, colour, detail)]."""
         r = self.S * 0.17
+        c = (self.W / 2, self.H * 0.34 if drives else self.H / 2 - self.sb / 2)
         self.disc((0, 0, 0), c, r * 1.12, alpha=170)
         self.ring(WHITE, c, r, self.px(10), alpha=55)
         self.ring(WHITE, c, r, self.px(10), alpha=240, end=360 * max(0.0, min(1.0, progress)))
         self.power_icon(c, r * 0.42, WHITE)
+        if drives:
+            self.drive_panel(drives, top=c[1] + r * 1.3)
+
+    def drive_panel(self, rows, top):
+        """Each drive: icon, name, status (coloured) and free space."""
+        S = self.S
+        row_h = int(S * 0.095)
+        pad = int(S * 0.03)
+        w = int(min(self.W * 0.92, S * 1.25))
+        panel = pygame.Rect(0, 0, w, pad * 2 + row_h * len(rows))
+        panel.midtop = (int(self.W / 2), int(top))
+        self.rrect((0, 0, 0), panel, 190, int(S * 0.03))
+        size = S * 0.05
+        for i, (kind, name, status, colour, detail) in enumerate(rows):
+            cy = panel.top + pad + row_h * i + row_h // 2
+            x = panel.left + pad
+            x += self.drive_icon(x, cy, int(row_h * 0.42), colour, kind) + int(S * 0.025)
+            r = self.blit_text(name, size, WHITE, shadow=False, midleft=(x, cy))
+            r = self.blit_text(status, size, colour, shadow=False,
+                               midleft=(max(r.right + S * 0.03, panel.left + S * 0.27), cy))
+            self.blit_text(detail, size * 0.86, (200, 200, 200), shadow=False,
+                           midright=(panel.right - pad, cy))
 
     def power_icon(self, c, r, colour, alpha=255):
         w = max(3, int(r * 0.2))

@@ -151,9 +151,7 @@ class SSDCheck:
         info["fstype"] = this.get("fstype") or top.get("fstype")
         info["label"] = this.get("label")
         info["usb"] = _usb_info(disk_dir) if disk_dir else {}
-        info["io_errors"] = st.ssd.notes.get("io")
         info["problems"] = list(st.ssd.errors.values())
-        info["notes"] = list(st.ssd.notes.values())
         info["free_text"] = media.human_bytes(st.ssd.free) if st.ssd.present else "—"
         info["ideal"] = self._ideal(info)
         info["ssd_only"] = len(st.ssd_only()) if st.ssd.present else None
@@ -292,25 +290,13 @@ class SSDCheck:
 
         self._set(0.15, "Reading the system's messages about the drive")
         msgs = kernel_messages(disk_name, usb.get("port"))
-        errs = [m for m in msgs if m["kind"] == "error"]
-        link = [m for m in msgs if m["kind"] == "link"]
-        harmless = [m for m in msgs if m["kind"] == "harmless"]
-        if errs:
-            self._result("bad", f"{len(errs)} read/write errors reported", "The drive (or its "
-                         "cable/adapter) failed some requests. See the messages below.",
-                         lines=[m["text"] for m in msgs[-25:]])
-        elif link:
-            self._result("warn", f"The USB link reset {len(link)} times",
-                         "Usually power or the cable: use a blue USB 3 port, a short cable and "
-                         "the official supply.", lines=[m["text"] for m in msgs[-25:]])
-        elif harmless:
-            self._result("ok", "No real errors in the system's messages",
-                         f"{len(harmless)} refused SMART requests: the USB adapter doesn't pass "
-                         "health queries through. That's common and not a fault; it's what the "
-                         "\"SSD I/O errors\" warnings were.", lines=[m["text"] for m in msgs[-25:]])
-        else:
-            self._result("ok", "No errors in the system's messages", "",
-                         lines=[m["text"] for m in msgs[-25:]])
+        # Shown for interest only: the drive is judged by whether files copy and check out.
+        blips = [m for m in msgs if m["kind"] in ("error", "link")]
+        self._result("info", "System messages", (f"{len(blips)} connection blips logged since "
+                     "start-up (the system retries them). " if blips else "Nothing unusual. ") +
+                     "Not used to judge the drive: what counts is whether files save and check "
+                     "out, below.", lines=[m["text"] for m in msgs[-25:]])
+        self._recent_recordings()
         if self._abort.is_set():
             return
 
@@ -319,6 +305,24 @@ class SSDCheck:
             return
         self._speed_test(base=0.65, span=0.35)
         return self._verdict_text()
+
+    def _recent_recordings(self):
+        """Did the last few videos save and check out on the SSD?"""
+        st = self.storage
+        names = st.manifest.names()[-10:]
+        copies = [((st.manifest.entry(n) or {}).get("copies") or {}).get("ssd") or {}
+                  for n in names]
+        bad = [n for n, c in zip(names, copies) if c.get("status") in ("bad", "damaged")]
+        good = [n for n, c in zip(names, copies) if c.get("status") == "verified"]
+        if "last_save" in st.ssd.errors or bad:
+            self._result("bad", "Recordings aren't saving properly on the SSD",
+                         "New recordings go to the microSD until a video saves on the SSD "
+                         "again." + (f" Failed: {', '.join(bad[-3:])}" if bad else ""))
+        elif good:
+            self._result("ok", "Recordings are saving on the SSD",
+                         f"the last {len(good)} videos on it saved and checked out")
+        else:
+            self._result("info", "No recent recordings on the SSD to check", "")
 
     def _fsck(self, drive, repair, base, span):
         st = self.storage

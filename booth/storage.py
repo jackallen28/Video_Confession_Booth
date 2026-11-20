@@ -619,21 +619,8 @@ class Storage:
         d.device = dev
         if "ro" in opts:
             d.errors["readonly"] = "drive went read-only (filesystem errors?)"
-        n = read_ioerr(dev)
-        base = self._ioerr.get(dev)
-        if n is not None and base is not None and n < base:    # drive re-plugged: count reset
-            self._ioerr[dev] = base = n
-            d.notes.pop("io", None)
-        if n is not None and base is not None and n > base and \
-                time.monotonic() < self._forgive_until:
-            self._ioerr[dev] = base = n       # caused by the SMART query just made
-        if n is not None and base is not None and n > base:
-            # Only noted: whether the SSD is used depends on whether recordings
-            # actually save on it (see _last_save). USB adapters log harmless ones.
-            msg = f"{n - base} I/O errors counted by the system"
-            if d.notes.get("io") != msg:            # log when it changes, not every 15 s
-                log.warning("SSD: %s (not a problem unless recordings fail to save)", msg)
-            d.notes["io"] = msg
+        # (The system's own I/O error count isn't used: whether the SSD is fine is
+        # judged by whether recordings save and check out on it, see _last_save.)
         try:
             os.makedirs(d.video_dir, exist_ok=True)
         except OSError as e:

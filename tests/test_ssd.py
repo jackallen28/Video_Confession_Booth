@@ -121,6 +121,8 @@ def test_check_then_refused_then_reformat():
             j = rig.run("check")
             titles = " | ".join(r["title"] for r in j["results"])
             assert j["state"] == "done", j
+            assert "System messages" in titles, titles             # shown, never "bad"
+            assert all(r["level"] != "bad" for r in j["results"]), j["results"]
             assert "ext4 filesystem is clean" in titles and "Write/read test passed" in titles, titles
             assert st.ssd.present and not st.maintenance
             assert not os.path.exists(os.path.join(st.ssd.video_dir, ".booth-speed-test"))

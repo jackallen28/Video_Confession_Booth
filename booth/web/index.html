@@ -594,8 +594,6 @@ async function loadSSD() {
       ["Adapter", (usb.adapter || "—") + (usb.driver ? ` (${usb.driver})` : "")],
       ["Status", d.maintenance ? "Offline for " + d.maintenance
         : d.problems.length ? d.problems.join(", ") : d.mounted ? "OK" : "Not mounted"]];
-    if (d.notes && d.notes.length) rows.push(["Note", d.notes.join(", ") +
-      " (only a problem if recordings stop saving)"]);
     const kids = rows.map(([k, v]) => el("div", {class: "row"}, el("span", {class: "k"}, k),
                                          el("span", {class: "v"}, v)));
     if (d.ideal.length) kids.push(el("p", {class: "muted", style: "margin:8px 2px 0"},

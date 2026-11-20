@@ -123,6 +123,9 @@ app.storage.wait_idle(60)
 run(0.5)
 app.button.key(True)
 run(4.0); shot("15_hold_shutdown")
+rows = app._drive_rows()                   # the drive panel under the power ring
+assert [r[1] for r in rows] == ["SSD", "microSD"] and all(r[2] == "OK" for r in rows), rows
+assert all("free" in r[4] for r in rows), rows
 run(until=state("shutdown"))
 run(until=lambda: app.shutdown_stage == "ejected"); shot("16_ejected")
 run(until=lambda: not app.running, timeout=10)

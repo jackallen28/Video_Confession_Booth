@@ -18,6 +18,7 @@ import time
 import pygame
 
 from . import devices, display, media, themes, updater, video
+from . import ui as ui_mod
 from .button import Button, uses_button, uses_touch
 from .camera import Camera
 from .highlights import Highlights
@@ -594,7 +595,40 @@ class App:
 
         if self._hold_kind(now) == "shutdown":
             span = cfg["hold_shutdown_seconds"] - cfg["hold_feedback_after"]
-            ui.hold((now - self.press_t - cfg["hold_feedback_after"]) / span)
+            ui.hold((now - self.press_t - cfg["hold_feedback_after"]) / span,
+                    self._drive_rows())
+
+    def _drive_rows(self):
+        """For the power-off hold: each drive's status and the space left."""
+        if getattr(self, "_rows_for", None) != self.press_t:     # once per hold
+            self._rows_for = self.press_t
+            try:
+                rate = self.storage.placement()["mb_per_minute"]
+            except Exception:  # noqa: BLE001 - only a nicety
+                rate = None
+            snap = self.storage.snapshot()
+            rows = []
+            for kind, name in (("ssd", "SSD"), ("sd", "microSD")):
+                d = snap[kind]
+                if not d["present"]:
+                    rows.append((kind, name, "not connected", ui_mod.GREY, ""))
+                    continue
+                if d["errors"]:
+                    status, colour = "problem", (255, 72, 72)
+                    if "last_save" in d["errors"]:
+                        status = "last video didn't save"
+                elif d.get("low"):
+                    status, colour = "nearly full", ui_mod.AMBER
+                else:
+                    status, colour = "OK", ui_mod.GREEN
+                free = max(0, (d["free"] or 0) - self.storage.min_free)
+                detail = media.human_bytes(free) + " free"
+                if rate:
+                    hours = free / (rate * 1e6) / 60
+                    detail += f" · {hours:.0f} h" if hours >= 10 else f" · {hours:.1f} h"
+                rows.append((kind, name, status, colour, detail))
+            self._rows = rows
+        return self._rows
 
     def _status_visible(self, snap):
         """The free-space bar only comes up when it matters (see status_bar setting)."""

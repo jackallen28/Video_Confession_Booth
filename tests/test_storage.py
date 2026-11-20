@@ -284,13 +284,8 @@ def test_smart_check_is_not_an_ssd_error():
             st._forgive_until = 0                  # 90 s later: errors count again
             cnt["n"] += 1                          # an error the system counted
             st._check_ssd()
-            # noted on the web page, but the SSD stays in use: only a recording that
-            # doesn't save stops the booth using a drive
-            assert st.ssd.notes.get("io", "").startswith("1 I/O errors"), st.ssd.notes
-            assert not st.ssd.errors and st.ssd.usable(0)
-            cnt["n"] = 0                           # re-plugged: the kernel's count restarts
-            st._check_ssd()
-            assert "io" not in st.ssd.notes
+            # not used: only a recording that doesn't save stops the booth using a drive
+            assert not st.ssd.errors and not st.ssd.notes and st.ssd.usable(0)
 
 
 def test_placement_and_room_left():
