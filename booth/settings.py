@@ -36,9 +36,10 @@ FIELDS = [
     dict(key="timestamp_size", group="Recording", label="Date/time size", type="select",
          options=["small", "medium", "large"], apply="live"),
     dict(key="storage_mode", group="Recording", label="Where videos are saved", type="select",
-         options=["ssd_first", "both"], apply="live",
-         help="SSD first: SSD, then the microSD when the SSD is full. Both: a copy on each "
-              "(a backup, but half the space)"),
+         options=["both", "ssd_first", "sd_first", "ssd_only", "sd_only"], apply="live",
+         help="Both: a copy on each at the same time (if one fills up or fails, the other "
+              "carries on). 'First': that drive until it's full or fails, then the other. "
+              "'Only': never uses the other drive"),
     dict(key="max_record_seconds", group="Recording", label="Longest recording (seconds)",
          type="int", min=10, max=1800, apply="live"),
     dict(key="av_offset", group="Recording", label="Sound/picture sync (seconds)", type="float",
@@ -53,11 +54,6 @@ FIELDS = [
     dict(key="waiting_theme", group="Screen", label="Waiting screen (physical button)",
          type="select", options=["confessional", "neon", "spotlight", "drama", "hand", "fessup"],
          apply="live"),
-    dict(key="waiting_arrow", group="Screen", label="Arrow pointing at the button", type="bool",
-         apply="live"),
-    dict(key="button_hint_x", group="Screen", label="Arrow to the button: position across",
-         type="float", min=0.0, max=1.0, step=0.01, apply="live",
-         help="0 = left edge, 0.5 = middle, 1 = right edge (physical button)"),
     dict(key="start_animation", group="Screen", label="Before recording", type="select",
          options=["countdown", "clapperboard", "both", "none"], apply="live"),
     dict(key="countdown_from", group="Screen", label="Countdown from", type="int", min=1, max=10,

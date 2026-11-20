@@ -420,29 +420,13 @@ class UI:
             img.blit(glow, (0, 0))
             self.screen.blit(img, (0, cy - h // 2))
 
-    def press_hint(self, t, pressed, x_frac, glow=1.0):
+    def press_hint(self, t, pressed, x_frac=None, glow=1.0):
         """Waiting screen with the physical button: black, a little hand pressing a
-        glowing red arcade button, and an arrow pointing up at the real button."""
+        glowing red arcade button, in the middle of the screen."""
         self.screen.fill((0, 0, 0))
         W, H = self.W, self.H
         u = self.S * 0.36                       # size of the drawing
-        ax = int(max(self.S * 0.06, min(W - self.S * 0.06, W * x_frac)))
-        cx = max(u * 0.65, min(W - u * 0.65, ax))   # drawing stays on screen
-        # arrow up to the button (bobs upwards)
-        bob = self.S * 0.02 * (0.5 - 0.5 * math.cos(t * 2 * math.pi / 1.2))
-        top = int(H * 0.05 - bob)
-        bottom = int(H * 0.36 - bob)
-        shaft = max(4, int(self.S * 0.022))
-        head = self.S * 0.075
-        self.rrect(WHITE, pygame.Rect(ax - shaft // 2, int(top + head * 0.8), shaft,
-                                      max(2, int(bottom - top - head * 0.8))), 235, shaft // 2)
-        pts = [(ax, top), (ax - head * 0.62, top + head), (ax + head * 0.62, top + head)]
-        pygame.gfxdraw.filled_polygon(self.screen, pts, WHITE)
-        pygame.gfxdraw.aapolygon(self.screen, pts, WHITE)
-        # if the drawing had to move in from the edge, bend the arrow to it
-        if abs(cx - ax) > 2:
-            pygame.draw.line(self.screen, WHITE, (ax, bottom), (cx, bottom + self.S * 0.03), shaft)
-        self.arcade_hand(cx, H * 0.36 + u * 0.12, u, t, pressed, glow)
+        self.arcade_hand(W / 2, H / 2 - u * 0.75, u, t, pressed, glow)
 
     def arcade_hand(self, cx, top, u, t, pressed, glow):
         """The little animation: a hand comes down and presses a red arcade button."""

@@ -13,19 +13,18 @@ everything a press of the button does below ("hold" = keep a finger on the scree
 physical red button instead, or both, change **Screen → Start/stop with** on the web page (the
 booth restarts). The button's light is only used with the physical button.
 
-![Physical button mode: waiting screen with the hand and arrow, TV switching on, recording, saving over snippets, hold to delete, saved](docs/button-mode.png)
+![Physical button mode: waiting screen with the hand, TV switching on, recording, saving over snippets, hold to delete, saved](docs/button-mode.png)
 
 - **Waiting:**
   - ![Waiting screens: Confessional (default), Neon sign, Spotlight](docs/waiting-screens.png)
-  - *Physical button:* a reality-TV style screen saying **"Press button to begin recording"** with
-    a bouncing arrow pointing up at the real button. Choose the style on the web page (Screen →
+  - *Physical button:* a reality-TV style screen saying **"Press button to begin recording"**.
+    Choose the style on the web page (Screen →
     *Waiting screen*): **Confessional** (glowing pink bokeh, the default), **Neon sign**,
     **Spotlight**, **Drama** (spinning sunburst), a little **hand** pressing an arcade button, or
     **Fess Up!**: a paper star and the words stuck on one by one, scrapbook style, then
     "Go on, press the button" pulses softly for 10 s and it starts again. (Fess Up! uses its own
     artwork, so the "Words on screen" waiting-screen lines don't change it.)
-    The words can be changed too. The arrow's position across the screen is Screen → *Arrow to
-    the button* (0.86 matches the enclosure drawing). The button's light fades fully on and off.
+    The words can be changed too. The button's light fades fully on and off.
   - *Touch screen:* the live camera (mirrored like a mirror) with a see-through red button and
     `TAP TO RECORD`.
 - **Press:** with the physical button the screen **switches on like an old TV** (a dot, a bright
@@ -209,15 +208,25 @@ being recorded now.
 
 **Where videos go** (web page → Camera → *Where videos are saved*):
 
-- **SSD first, then microSD** (default): each video is saved on the SSD. When the SSD has less
-  than 1 GB left, new recordings go to the microSD card instead. A recording that's going on when
-  the SSD fills up is stopped and saved properly first (never cut off by a full drive). If the SSD
-  is unplugged, recordings go to the microSD, and are copied onto the SSD when it's back (if it has
-  room), so everything ends up on the SSD where possible. Each video is one copy (checked), so
-  there is no backup copy.
-- **Both drives:** every video is written to both drives at the same time, so there's always a
-  backup copy (half the space). If a guest knocks the SSD cable out mid-recording, the microSD copy
-  keeps going (and the other way round).
+- **Both drives at the same time** (default): every video is written to the SSD and the microSD
+  at once, so there's always a backup copy. If a guest knocks the SSD cable out mid-recording, the
+  microSD copy keeps going (and the other way round). When one drive is full (under 1 GB left) or
+  failing, recording carries on with the other one alone.
+- **SSD first, then microSD when full** / **microSD first, then SSD when full:** one copy, on the
+  first drive until it's full or failing, then on the other. Videos recorded on the second drive
+  are copied onto the first one when it's back and has room.
+- **SSD only** / **microSD only:** never uses the other drive. If that drive is missing, full or
+  failing, the booth can't record until it's sorted.
+
+A recording that's going on when its drive fills up is stopped and saved properly first (never
+cut off by a full drive). Roughly 25–45 MB per minute at 720p (about 40–65 hours per 100 GB); the
+SSD tab shows the real figure from your videos and the hours left on each drive.
+
+**The drive check is the recordings themselves.** After each recording the booth checks every copy
+it wrote (it plays, and the checksums match). If a drive's copy didn't save properly, that drive
+isn't used for the next recording; the other drive is. The booth then tries it again by copying a
+video onto it, and uses it again as soon as that copy checks out (or when it's re-plugged, or the
+warning is cleared on the SSD tab). It doesn't write test files or query the drive on a timer.
 
 Roughly 4–5 GB per hour of recording at 1080p.
 
@@ -312,8 +321,8 @@ are in [`config.example.toml`](config.example.toml)); after changing them:
 ## Keeping the videos safe
 
 - Each recording is written in a format that survives a power cut, then turned into MP4 and
-  checked (below). With *Both drives* it's on the SSD and microSD at the same time; with *SSD
-  first* it's one copy, and a recording is stopped and saved before its drive is full.
+  checked (below). With *Both drives* (the default) it's on the SSD and microSD at the same time;
+  with the other modes it's one copy, and a recording is stopped and saved before its drive is full.
 - Nothing erases a video. Nothing on the web page can delete one; a guest can "delete" theirs
   straight after recording (hold + press again), which only moves it into the `DELETED` folder on
   each drive (restore it from the web page).
@@ -360,10 +369,10 @@ Web page → **SSD** shows the drive, its connection (USB 3 or 2), its adapter a
    `cd Confessions && sha256sum -c SHA256SUMS` (Mac: `shasum -a 256 -c SHA256SUMS`).
 
 While the booth runs it also checks, every 15 s: the SSD is still connected (it's remounted if it
-was unplugged and plugged back in), neither drive has switched to read-only, the SSD has no new
-I/O errors, and free space. Every 5 minutes (when nobody is recording) a test file is written and
-read back on both drives. Every 10 minutes one saved video is re-read and compared with its
-checksum. Every 30 minutes the SSD's SMART health is read, if its USB adapter supports it.
+was unplugged and plugged back in), neither drive has switched to read-only, and free space. Every
+10 minutes one saved video is re-read and compared with its checksum. Whether a drive is used
+depends on whether its last recording saved properly (above); I/O errors the system counts are
+only shown on the SSD tab.
 Background work is slowed down while someone is recording so it never affects the camera.
 
 A record of every clip and every check (including deleted ones) is kept in
@@ -379,7 +388,7 @@ power warnings, or `"always"` to keep it on screen. Drive faults are always in t
 |-------|-------|
 | White SSD / SD free space | All good |
 | Yellow | Under 8 GB free |
-| Red | Drive problem (read-only, I/O errors, write test failed, SMART failing). Recording uses the other drive |
+| Red | Drive problem (its last recording didn't save, or it went read-only). Recording uses the other drive |
 | Grey `—` | SSD not connected. Recording goes to the microSD only, copied later |
 | Spinning circle | Checking or copying recordings in the background |
 | Microphone with a line through it | No microphone found. Recording without sound |

@@ -151,8 +151,9 @@ class SSDCheck:
         info["fstype"] = this.get("fstype") or top.get("fstype")
         info["label"] = this.get("label")
         info["usb"] = _usb_info(disk_dir) if disk_dir else {}
-        info["io_errors"] = st.ssd.errors.get("io")
+        info["io_errors"] = st.ssd.notes.get("io")
         info["problems"] = list(st.ssd.errors.values())
+        info["notes"] = list(st.ssd.notes.values())
         info["free_text"] = media.human_bytes(st.ssd.free) if st.ssd.present else "—"
         info["ideal"] = self._ideal(info)
         info["ssd_only"] = len(st.ssd_only()) if st.ssd.present else None

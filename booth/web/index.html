@@ -594,6 +594,8 @@ async function loadSSD() {
       ["Adapter", (usb.adapter || "—") + (usb.driver ? ` (${usb.driver})` : "")],
       ["Status", d.maintenance ? "Offline for " + d.maintenance
         : d.problems.length ? d.problems.join(", ") : d.mounted ? "OK" : "Not mounted"]];
+    if (d.notes && d.notes.length) rows.push(["Note", d.notes.join(", ") +
+      " (only a problem if recordings stop saving)"]);
     const kids = rows.map(([k, v]) => el("div", {class: "row"}, el("span", {class: "k"}, k),
                                          el("span", {class: "v"}, v)));
     if (d.ideal.length) kids.push(el("p", {class: "muted", style: "margin:8px 2px 0"},
@@ -607,8 +609,9 @@ async function loadSSD() {
         toast("Warning cleared"); loadSSD(); poll();
       });
       kids.push(el("p", {class: "muted", style: "margin:8px 2px 0"},
-        "While there's a warning, the booth records to the microSD instead. Run a Quick check; " +
-        "if it finds the drive is fine, clear the warning to use the SSD again."), b);
+        "While there's a warning, new recordings go to the microSD. The booth tries the SSD " +
+        "again by copying a video over, and goes back to it when that works. Or run a Quick " +
+        "check and, if it's fine, clear the warning."), b);
     }
     info.replaceChildren(...kids);
   }
@@ -682,12 +685,15 @@ function renderPlacement(pl, mode) {
   }
   kids.push(el("p", {class: "muted", style: "margin:8px 2px 0"},
     (pl.mb_per_minute ? `Your videos use about ${pl.mb_per_minute} MB per minute. ` : "") +
-    (mode === "both" ? "Saving mode: every video on both drives; when one is full, the other carries on."
-                     : "Saving mode: SSD first, the microSD only when the SSD is full or has a problem. " +
-                       "Change it under Camera → Recording (\"Both drives\" keeps a backup copy).")));
-  if (sdOnly && !ssdUnknown && mode !== "both") kids.push(el("p", {class: "muted", style: "margin:6px 2px 0"},
-    `${sdOnly} video(s) are only on the microSD (recorded while the SSD was full, unplugged or had a ` +
-    "warning). The booth copies them onto the SSD in the background when it can."));
+    "Saving: " + ({both: "every video on both drives at the same time; if one is full or fails, " +
+      "the other carries on.", ssd_first: "the SSD, then the microSD once the SSD is full or fails.",
+      sd_first: "the microSD, then the SSD once the microSD is full or fails.",
+      ssd_only: "the SSD only.", sd_only: "the microSD only."}[mode] || mode) +
+    " Change it under Camera → Recording → Where videos are saved."));
+  if (sdOnly && !ssdUnknown && ["both", "ssd_first", "ssd_only"].includes(mode))
+    kids.push(el("p", {class: "muted", style: "margin:6px 2px 0"},
+      `${sdOnly} video(s) aren't on the SSD yet (recorded while it was full, unplugged or had a ` +
+      "warning). The booth copies them onto the SSD in the background when it can."));
   const list = el("div", {});
   for (const v of vids) {
     const mark = d => v.on[d] === "verified" ? el("span", {class: "chip safe"}, names[d] + " ✓")
@@ -736,7 +742,8 @@ const LABELS = {max: "Best available (auto)", when_full: "When nearly full",
   "start_animation:none": "Nothing (record straight away)",
   "input:touch": "Touch screen", "input:button": "Physical button", "input:both": "Touch screen or button",
   landscape: "Landscape", portrait: "Portrait",
-  ssd_first: "SSD first, then microSD", both: "Both drives (backup copy)",
+  "storage_mode:both": "Both drives at the same time", ssd_first: "SSD first, then microSD when full",
+  sd_first: "microSD first, then SSD when full", ssd_only: "SSD only", sd_only: "microSD only",
   confessional: "Confessional (pink bokeh)", neon: "Neon sign", spotlight: "Spotlight",
   drama: "Drama (sunburst)", hand: "Hand pressing a button",
   fessup: "Fess Up! (scrapbook star)",

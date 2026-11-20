@@ -163,54 +163,10 @@ class WaitingScreen:
             getattr(self, f"_build_{theme}")()
             self._built = key
         getattr(self, f"_draw_{theme}")(t)
-        if self.cfg.get("waiting_arrow", True):
-            self._arrow(t, x_frac, theme)
 
     def _lines(self):
         return (self.cfg.get("waiting_title") or "Press button",
                 self.cfg.get("waiting_subtitle") or "to begin recording")
-
-    ARROW_GLOW = {"confessional": (255, 60, 200), "neon": (30, 200, 255),
-                  "spotlight": (255, 170, 40), "drama": (60, 0, 60), "fessup": (90, 0, 12)}
-
-    def _arrow_sprite(self, glow_colour):
-        """A chunky rounded arrow with a soft glow, drawn once (big, then shrunk
-        for smooth edges)."""
-        S, k = self.S, 4
-        hw, hh = S * 0.15, S * 0.10          # head width/height
-        sw, sl = S * 0.06, S * 0.11          # shaft width/length
-        w, h = int(hw * k), int((hh + sl) * k)
-        big = pygame.Surface((w, h), pygame.SRCALPHA)
-        cx = w / 2
-        r = sw * k / 2
-        # rounded shaft
-        pygame.draw.rect(big, (255, 255, 255), (cx - r, hh * k * 0.6, 2 * r, (sl + hh * 0.4) * k),
-                         border_radius=int(r))
-        # head: a clean triangle, slightly swept back
-        pygame.draw.polygon(big, (255, 255, 255), [(cx, 0), (w, hh * k), (cx + r, hh * k * 0.86),
-                                                   (cx - r, hh * k * 0.86), (0, hh * k)])
-        arrow = pygame.transform.smoothscale(big, (w // k, h // k))
-        g, pad = glow(arrow, glow_colour, S * 0.025)
-        out = pygame.Surface(g.get_size(), pygame.SRCALPHA)
-        out.blit(g, (0, 0))
-        out.blit(g, (0, 0))
-        out.blit(arrow, (pad, pad))
-        return out
-
-    def _arrow(self, t, x_frac, theme=None):
-        """Points up at the real button and bounces towards it."""
-        W, S = self.W, self.S
-        key = ("arrow", theme)
-        if getattr(self, "_arrow_key", None) != key:
-            self._arrow_img = self._arrow_sprite(self.ARROW_GLOW.get(theme, (255, 255, 255)))
-            self._arrow_key = key
-        img = self._arrow_img
-        ax = int(max(S * 0.07, min(W - S * 0.07, W * x_frac)))
-        # a bounce: quick hop up towards the button, settle back down
-        p = (t % 1.1) / 1.1
-        hop = math.sin(min(1.0, p / 0.55) * math.pi) if p < 0.55 else 0.0
-        y = S * 0.035 - hop * S * 0.035 - img.get_height() * 0.08
-        self.screen.blit(img, (ax - img.get_width() // 2, int(y)))
 
     def _centre_text(self, surf, cy):
         self.screen.blit(surf, surf.get_rect(center=(self.W // 2, int(cy))))

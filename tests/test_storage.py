@@ -282,12 +282,15 @@ def test_smart_check_is_not_an_ssd_error():
             st._smart()
             assert cnt["n"] == 7
             st._forgive_until = 0                  # 90 s later: errors count again
-            cnt["n"] += 1                          # a real error
+            cnt["n"] += 1                          # an error the system counted
             st._check_ssd()
-            assert st.ssd.errors.get("io") == "1 I/O errors", st.ssd.errors
+            # noted on the web page, but the SSD stays in use: only a recording that
+            # doesn't save stops the booth using a drive
+            assert st.ssd.notes.get("io", "").startswith("1 I/O errors"), st.ssd.notes
+            assert not st.ssd.errors and st.ssd.usable(0)
             cnt["n"] = 0                           # re-plugged: the kernel's count restarts
             st._check_ssd()
-            assert "io" not in st.ssd.errors
+            assert "io" not in st.ssd.notes
 
 
 def test_placement_and_room_left():
@@ -303,6 +306,41 @@ def test_placement_and_room_left():
         assert on[b]["sd"] == "verified", on
         assert pl["mb_per_minute"] is None, "too little video to estimate yet"
         assert set(pl["room"]) == {"ssd", "sd"} and pl["room"]["sd"]["free"] > 0
+
+def test_storage_modes():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp)
+        assert config.DEFAULTS["storage_mode"] == "both", "default: both drives at once"
+        want = {"both": {"ssd", "sd"}, "ssd_first": {"ssd"}, "sd_first": {"sd"},
+                "ssd_only": {"ssd"}, "sd_only": {"sd"}}
+        for mode, drives in want.items():
+            cfg["storage_mode"] = mode
+            assert set(st.targets()) == drives, (mode, st.targets())
+        # the first choice full: "first" modes move on, "only" modes don't
+        st.ssd.free = 0
+        for mode, drives in {"both": {"sd"}, "ssd_first": {"sd"}, "ssd_only": set(),
+                             "sd_first": {"sd"}}.items():
+            cfg["storage_mode"] = mode
+            assert set(st.targets()) == drives, (mode, st.targets())
+
+
+def test_last_recording_is_the_drive_check():
+    """A drive whose last recording didn't save isn't used for the next one; a
+    video that then copies onto it properly puts it back in use."""
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp, mode="both")
+        a = st.new_name()
+        parts = {d.name: d.path(st.part_name(a)) for d in (st.ssd, st.sd)}
+        make_video(parts["sd"])
+        open(parts["ssd"], "wb").close()               # nothing reached the SSD
+        st.finalize({"name": a, "parts": parts, "duration": 2.0, "frames": 60, "dropped": 0})
+        assert "last_save" in st.ssd.errors and set(st.targets()) == {"sd"}, st.ssd.errors
+        st.accept(a)
+        run_queue(st)                                  # the booth copies it over: works
+        assert "last_save" not in st.ssd.errors, st.ssd.errors
+        assert set(st.targets()) == {"ssd", "sd"}
+        assert media.sha256_file(st.ssd.path(a)) == media.sha256_file(st.sd.path(a))
+
 
 if __name__ == "__main__":
     for fn in [v for k, v in sorted(globals().items()) if k.startswith("test_")]:

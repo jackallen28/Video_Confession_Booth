@@ -95,10 +95,13 @@ DEFAULTS = {
 
     # --- Storage ----------------------------------------------------------
     "sd_dir": "/srv/confessions",
-    # "ssd_first": each video on the SSD; the microSD is used when the SSD is
-    # full (or unplugged). "both": every video on both drives (a backup copy,
-    # half the space).
-    "storage_mode": "ssd_first",
+    # Where videos are saved:
+    #   "both"       every video on the SSD and the microSD at the same time (a
+    #                backup copy); when one is full or failing, the other carries on
+    #   "ssd_first"  the SSD; the microSD once the SSD is full or failing
+    #   "sd_first"   the microSD; the SSD once the microSD is full or failing
+    #   "ssd_only"   only the SSD          "sd_only"   only the microSD
+    "storage_mode": "both",
     # "auto": the program finds and mounts the USB SSD itself (and remounts it
     # if it is unplugged and plugged back in). "directory": ssd_mount is just a
     # folder that is already there (fstab mounts, or testing).
@@ -111,7 +114,6 @@ DEFAULTS = {
     "min_free_mb": 1024,         # stop / don't record below this
     "low_free_mb": 8192,         # status bar turns amber below this
     "health_interval": 15,
-    "write_test_interval": 300,
     "scrub_interval": 600,       # re-check one saved file's checksum when idle
     # Automatic SMART health queries (seconds; 0 = only from the SSD tab). Off by
     # default: many USB-SATA adapters can't pass them through and then fail the
@@ -124,15 +126,13 @@ DEFAULTS = {
     # full, i.e. under low_free_mb), "problems" (also for drive faults, missing
     # SSD/mic, power warnings) or "always".
     "status_bar": "when_full",
-    # Physical button: where the on-screen arrow points (0 = left edge of the
-    # screen, 1 = right edge). 0.86 = the button hole in the enclosure drawing.
-    "button_hint_x": 0.86,
+    "button_hint_x": 0.86,       # (no longer used: there's no arrow)
     # Physical button: the waiting screen. confessional, neon, spotlight,
     # drama (reality-TV styles with "Press button to begin recording") or hand.
     "waiting_theme": "confessional",
     "waiting_title": "Press button",
     "waiting_subtitle": "to begin recording",
-    "waiting_arrow": True,       # small arrow pointing up at the real button
+    "waiting_arrow": False,      # (no longer used)
     "fullscreen": True,
     # Screens bigger than this (e.g. a 1080p TV) are drawn at this size and
     # scaled up by the GPU, which keeps the booth smooth on a Pi 3B+.

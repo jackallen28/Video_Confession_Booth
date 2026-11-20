@@ -90,6 +90,7 @@ class Drive:
         self.total = None
         self.device = None
         self.errors = {}         # kind -> message; any entry = drive not trusted
+        self.notes = {}          # shown on the web page only (don't stop recording here)
         self.low = False
 
     @property
@@ -102,15 +103,19 @@ class Drive:
             return "warn"
         return "ok"
 
-    def usable(self, min_free):
-        return self.present and not self.errors and (self.free or 0) > min_free
+    def usable(self, min_free, copying=False):
+        """copying: a background copy is also how a drive whose last recording
+        failed gets tested again (a good copy clears that)."""
+        errs = [k for k in self.errors if not (copying and k == "last_save")]
+        return self.present and not errs and (self.free or 0) > min_free
 
     def path(self, name):
         return os.path.join(self.video_dir, name)
 
     def snapshot(self):
         return {"present": self.present, "level": self.level, "free": self.free,
-                "low": self.present and self.low, "errors": dict(self.errors)}
+                "low": self.present and self.low, "errors": dict(self.errors),
+                "notes": dict(self.notes)}
 
 
 def _mounts():
@@ -289,22 +294,33 @@ class Storage:
                 "undervolt": self.undervolt}
 
     # --------------------------------------------------------- recording io
+    MODES = {"both": ("ssd", "sd"), "ssd_first": ("ssd", "sd"), "sd_first": ("sd", "ssd"),
+             "ssd_only": ("ssd",), "sd_only": ("sd",)}
+
     @property
-    def ssd_first(self):
-        """storage_mode "ssd_first": each video on the SSD only, the microSD
-        used when the SSD is full or missing. "both": every video on both."""
-        return self.cfg.get("storage_mode", "ssd_first") == "ssd_first"
+    def mode(self):
+        m = self.cfg.get("storage_mode", "both")
+        return m if m in self.MODES else "both"
+
+    @property
+    def primary(self):
+        """Drives every video should end up on in this mode."""
+        order = self.MODES[self.mode]
+        return set(order) if self.mode == "both" else {order[0]}
 
     def targets(self):
-        """Where the next recording goes."""
+        """Where the next recording goes: both drives at once, or the first
+        drive in the mode's order that is connected, has room and saved the
+        last recording properly."""
         with self._hlock:
             usable = {d.name: d for d in self.drives if d.usable(self.min_free)}
-        if self.ssd_first:
-            for n in ("ssd", "sd"):
-                if n in usable:
-                    return {n: usable[n]}
-            return {}
-        return usable
+        order = self.MODES[self.mode]
+        if self.mode == "both":
+            return {n: usable[n] for n in order if n in usable}
+        for n in order:
+            if n in usable:
+                return {n: usable[n]}
+        return {}
 
     def has_room(self, names):
         """Is a recording going to these drives still OK? Stops (and saves)
@@ -314,12 +330,9 @@ class Storage:
                        for d in self.drives if d.name in names)
 
     def _copy_wanted(self, d, name, copies):
-        """Should drive d hold a copy of this video?"""
-        if not self.ssd_first:
-            return True
-        # SSD first: everything ends up on the SSD where possible; a copy that is
-        # on the microSD (SSD was full or unplugged) stays there too.
-        return d is self.ssd or d.name in copies or os.path.exists(d.path(name))
+        """Should drive d hold a copy of this video? Its mode's main drive(s)
+        always; any other drive keeps a copy it already has."""
+        return d.name in self.primary or d.name in copies or os.path.exists(d.path(name))
 
     def new_name(self):
         """Just the date and time, e.g. 2026-11-11_21-04-33.mp4 (a _2 is added
@@ -352,15 +365,18 @@ class Storage:
             final = part[:-len(PART_EXT)] + VIDEO_EXT
             if not os.path.exists(part) or os.path.getsize(part) == 0:
                 log.error("%s: no file on %s", name, drive_name)
+                self._last_save(drive_name, False)
                 return
             try:
                 media.fsync_file(part)
             except OSError as e:
                 log.error("%s: %s copy unreadable: %s", name, drive_name, e)
+                self._last_save(drive_name, False)
                 return
             ok, why = media.remux_to_mp4(part, final, when=result.get("started"))
             if not ok:
                 log.error("%s: MP4 on %s failed (%s); keeping the raw .ts", name, drive_name, why)
+                self._last_save(drive_name, False)
                 try:
                     os.replace(part, part[:-len(".part")])
                 except OSError:
@@ -369,6 +385,8 @@ class Storage:
             p = media.probe(final)
             log.info("%s on %s: %s", name, drive_name, p)
             outcome[drive_name] = p["ok"]
+            if not p["ok"]:
+                self._last_save(drive_name, False)
             if p["ok"]:
                 finals.append(final)
                 try:
@@ -553,11 +571,6 @@ class Storage:
             self._check_power()
             idle = not self.recording.is_set()
             now = time.monotonic()
-            if idle and now - self._last["write"] > self.cfg["write_test_interval"]:
-                self._last["write"] = now
-                for d in self.drives:
-                    if d.present:
-                        self._write_test(d)
             if idle and self.auto and self.ssd.present and self.cfg["smart_interval"] and \
                     now - self._last["smart"] > self.cfg["smart_interval"]:
                 self._last["smart"] = now
@@ -610,15 +623,17 @@ class Storage:
         base = self._ioerr.get(dev)
         if n is not None and base is not None and n < base:    # drive re-plugged: count reset
             self._ioerr[dev] = base = n
-            d.errors.pop("io", None)
+            d.notes.pop("io", None)
         if n is not None and base is not None and n > base and \
                 time.monotonic() < self._forgive_until:
             self._ioerr[dev] = base = n       # caused by the SMART query just made
         if n is not None and base is not None and n > base:
-            msg = f"{n - base} I/O errors"
-            if d.errors.get("io") != msg:            # log when it changes, not every 15 s
-                log.error("SSD I/O errors: %d (see: dmesg | grep -i sd)", n - base)
-            d.errors["io"] = msg
+            # Only noted: whether the SSD is used depends on whether recordings
+            # actually save on it (see _last_save). USB adapters log harmless ones.
+            msg = f"{n - base} I/O errors counted by the system"
+            if d.notes.get("io") != msg:            # log when it changes, not every 15 s
+                log.warning("SSD: %s (not a problem unless recordings fail to save)", msg)
+            d.notes["io"] = msg
         try:
             os.makedirs(d.video_dir, exist_ok=True)
         except OSError as e:
@@ -672,25 +687,6 @@ class Storage:
             else:
                 d.errors.pop("readonly", None)
 
-    def _write_test(self, d):
-        p = os.path.join(d.video_dir, ".booth-health-check")
-        data = os.urandom(512 * 1024)
-        try:
-            with open(p, "wb") as f:
-                f.write(data)
-                f.flush()
-                os.fsync(f.fileno())
-            media.drop_cache(p)
-            with open(p, "rb") as f:
-                back = f.read()
-            os.remove(p)
-            if back != data:
-                raise OSError("data read back is different")
-            d.errors.pop("write", None)
-        except OSError as e:
-            log.error("%s write test failed: %s", d.name, e)
-            d.errors["write"] = f"write test failed: {e}"
-
     def _smart(self):
         if not shutil.which("smartctl") or not self.ssd.device or self._no_smart:
             return
@@ -725,8 +721,9 @@ class Storage:
             dev = self._ssd_device
             if dev:
                 self._ioerr[dev] = read_ioerr(dev)
-            for k in ("io", "write", "smart"):
+            for k in ("io", "write", "smart", "last_save"):
                 self.ssd.errors.pop(k, None)
+            self.ssd.notes.pop("io", None)
         log.warning("SSD warning cleared from the SSD tab")
 
     def placement(self):
@@ -1058,7 +1055,7 @@ class Storage:
                                                    if v.get("status") != "missing"}):
                     continue
                 if c.get("status") == "verified" or \
-                        not d.usable(self.min_free + copies[ref].get("size", 0)):
+                        not d.usable(self.min_free + copies[ref].get("size", 0), copying=True):
                     continue
                 path = d.path(name)
                 if os.path.exists(path):
@@ -1078,13 +1075,19 @@ class Storage:
                     log.error("copy of %s on %s does not match!", name, d.name)
                     copies[d.name] = {"status": "bad", "sha256": digest}
 
+        # the drive check: did this video save properly on each drive?
+        for k, c in copies.items():
+            if c.get("status") == "verified":
+                self._last_save(k, True)
+            elif c.get("status") in ("bad", "damaged"):
+                self._last_save(k, False)
         if e.get("state") == "deleted":
             return
         verified = [k for k, c in copies.items() if c.get("status") == "verified"]
         expected = [d.name for d in self.drives if d.present]
         if not verified:
             e["state"] = "damaged"
-        elif self.ssd_first:
+        elif self.mode != "both":
             e["state"] = "safe"          # saved and checked (one copy by design)
         elif all(k in verified for k in expected) and len(verified) == len(self.drives):
             e["state"] = "safe"          # verified on both drives
@@ -1097,6 +1100,21 @@ class Storage:
 
     def _drive(self, name):
         return self.ssd if name == "ssd" else self.sd
+
+    def _last_save(self, drive_name, ok):
+        """The drive check: a drive whose last recording didn't save and check out
+        isn't used for new recordings (the other drive is) until a video saves on
+        it properly again (the booth retries by copying one over), it's
+        re-plugged, or the warning is cleared on the SSD tab."""
+        d = self._drive(drive_name)
+        if ok:
+            if d.errors.pop("last_save", None):
+                log.info("%s saved a video properly again: using it", d.name)
+        elif "last_save" not in d.errors:
+            label = "SSD" if d is self.ssd else "microSD"
+            d.errors["last_save"] = f"the last recording didn't save properly on the {label}"
+            log.error("%s: last recording didn't save properly; recording to the other drive",
+                      d.name)
 
     def _write_sums(self):
         for d in self.drives:

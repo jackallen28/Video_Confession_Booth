@@ -368,7 +368,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif p == "/api/ssd":
                 self._json({"drive": web.ssd.drive(), "job": web.ssd.status(),
                             "placement": web.app.storage.placement(),
-                            "storage_mode": web.cfg.get("storage_mode", "ssd_first"),
+                            "storage_mode": web.app.storage.mode,
                             "running": web.ssd.busy(), "booth_state": web.app.state})
             else:
                 self._not_found()

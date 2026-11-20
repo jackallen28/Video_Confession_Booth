@@ -315,7 +315,8 @@ run(lambda: app.state == "idle")
 assert not app.storage.paused.is_set()
 
 # SSD filling up mid-recording: stopped and saved before it's full; next one on the microSD
-assert app.storage.ssd_first and list(app.storage.targets()) == ["ssd"]
+app.cfg["storage_mode"] = "ssd_first"
+assert list(app.storage.targets()) == ["ssd"]
 press()
 run(lambda: app.state == "recording")
 run(lambda: app.recorder.elapsed() > 1.2)
