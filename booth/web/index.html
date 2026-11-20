@@ -414,7 +414,7 @@ function render() {
                 d.present ? (d.low ? "Nearly full" : d.level === "error" ? "Problem" : "OK") : "Recording to the other drive", c);
   };
   $("#stats").replaceChildren(
-    stat("Camera", cam.name || "Not found", m ? `${s.video_size} ${s.orientation} · ${+m.fps} fps · ${m.encoder === "h264_v4l2m2m" ? "hardware" : m.encoder}` : "",
+    stat("Camera", cam.name || "Not found", m ? `${s.video_size} ${s.orientation} · ${+m.fps} fps · ${cam.encoder}` : "",
          cam.ok ? "" : "badc"),
     stat("Microphone", s.mic ? "OK" : "None", s.mic ? s.mic.replace(/^plughw:CARD=|,DEV=\d+$/g, "") : "Recording without sound", s.mic ? "" : "warnc"),
     drive("SSD", s.drives.ssd), drive("microSD", s.drives.sd),

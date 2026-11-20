@@ -157,6 +157,7 @@ class Recorder:
         log.info("recording %s stopped: %.1fs, %d frames, %d dropped, exit %s",
                  self.name, duration, self.frames, self.dropped, self.proc.returncode)
         return {"name": self.name, "parts": self.parts, "duration": duration,
+                "started": self.started,
                 "frames": self.frames, "dropped": self.dropped,
                 "exit": self.proc.returncode, "error": self.error,
                 "ffmpeg_log": self.ffmpeg_log()}

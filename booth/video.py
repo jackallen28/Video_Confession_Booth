@@ -20,7 +20,14 @@ from .config import size_tuple
 log = logging.getLogger("booth.video")
 
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-MIN_SPEED = 1.3          # must encode 30% faster than real time (headroom for the preview)
+# How much faster than real time the test encode must run. Software encoding
+# (Pi 5: no H.264 hardware) shares the processor with the camera preview and
+# the screen, so it needs more headroom than the Pi 3/4 hardware encoder.
+MIN_SPEED = {"hw": 1.3, "sw": 1.6}
+
+# x264 speed settings, best quality (smallest files) first. The booth uses the
+# best one this Pi keeps up with at the camera's resolution.
+X264_PRESETS = ("veryfast", "superfast", "ultrafast")
 
 
 def available_encoders():
@@ -29,7 +36,31 @@ def available_encoders():
         text = r.stdout.decode(errors="replace")
     except (OSError, subprocess.SubprocessError):
         return []
-    return [e for e in ("h264_v4l2m2m", "libx264") if f" {e} " in text]
+    found = []
+    if " h264_v4l2m2m " in text and _v4l2_encoder_present():
+        found.append("h264_v4l2m2m")           # Pi 3/4 hardware encoder (not on a Pi 5)
+    if " libx264 " in text:
+        found += [f"libx264:{p}" for p in X264_PRESETS]
+    return found
+
+
+def _v4l2_encoder_present():
+    """The Pi 3/4 hardware encoder shows up as a bcm2835-codec video device."""
+    import glob
+    for name in glob.glob("/sys/class/video4linux/video*/name"):
+        try:
+            with open(name) as f:
+                if "encode" in f.read().lower():
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def describe_encoder(encoder):
+    if encoder == "h264_v4l2m2m":
+        return "hardware"
+    return "software " + encoder.split(":", 1)[1] if ":" in encoder else encoder
 
 
 def bitrate(cfg, w, h, fps):
@@ -39,11 +70,34 @@ def bitrate(cfg, w, h, fps):
     return f"{max(2.0, min(12.0, bits / 1e6)):.1f}M"
 
 
+# Tagged as standard HD video (the picture is converted to it in video_filter),
+# so QuickTime, Photos and iPhones show the colours as recorded.
+COLOUR_TAGS = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+               "-color_range", "tv"]
+
+
+def h264_level(w, h, fps):
+    """Smallest H.264 level that fits this picture size and frame rate (Annex A:
+    macroblocks per frame and per second); 4.1 at the least for compatibility."""
+    mbs = -(-w // 16) * -(-h // 16)
+    for level, max_fs, max_mbps in (("4.1", 8192, 245760), ("4.2", 8704, 522240),
+                                    ("5.0", 22080, 589824), ("5.1", 36864, 983040),
+                                    ("5.2", 36864, 2073600)):
+        if mbs <= max_fs and mbs * fps <= max_mbps:
+            return level
+    return "6.0"
+
+
 def encoder_args(cfg, encoder, w, h, fps):
     gop = str(int(round(fps)) * 2)
     if encoder == "h264_v4l2m2m":
-        return ["-c:v", "h264_v4l2m2m", "-b:v", bitrate(cfg, w, h, fps), "-g", gop]
-    return ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "21", "-g", gop]
+        return ["-c:v", "h264_v4l2m2m", "-b:v", bitrate(cfg, w, h, fps), "-g", gop] + COLOUR_TAGS
+    preset = encoder.split(":", 1)[1] if ":" in encoder else "veryfast"
+    # H.264 High profile, level 4.1: plays on every Mac and iPhone, and in every
+    # editor. CRF = steady quality; maxrate caps the file size on busy scenes.
+    level = h264_level(w, h, fps)
+    return ["-c:v", "libx264", "-preset", preset, "-crf", "21", "-profile:v", "high",
+            "-level:v", level, "-maxrate", "12M", "-bufsize", "24M", "-g", gop] + COLOUR_TAGS
 
 
 def _filter_escape(path):
@@ -80,7 +134,9 @@ def output_size(cfg, w, h):
 
 def video_filter(cfg, w, h, workdir, fps=None):
     """Filters for the recording: 4:2:0, upright for portrait, optional date/time."""
-    parts = ["format=yuv420p"] + orient_filters(cfg)
+    # webcam JPEGs are full-range BT.601; convert to standard HD video (BT.709,
+    # TV range) 4:2:0, which is what Apple devices expect
+    parts = ["scale=out_color_matrix=bt709:out_range=tv", "format=yuv420p"] + orient_filters(cfg)
     w, h = output_size(cfg, w, h)
     if cfg["timestamp"]:
         # The text goes in a file so no shell/filter escaping can break it.
@@ -148,7 +204,8 @@ def choose(cfg, dev, workdir, progress=None):
     cands, forced = _candidates(cfg, dev)
     encoders = available_encoders()
     if cfg["video_encoder"] != "auto":
-        encoders = [cfg["video_encoder"]]
+        enc = cfg["video_encoder"]
+        encoders = [f"libx264:{p}" for p in X264_PRESETS] if enc == "libx264" else [enc]
     if not encoders:
         raise RuntimeError("ffmpeg has no H.264 encoder (h264_v4l2m2m or libx264)")
 
@@ -167,28 +224,48 @@ def choose(cfg, dev, workdir, progress=None):
         pass
 
     choice, fallback, results = None, None, []
-    for m in cands[:5]:
-        for enc in encoders:
-            if progress:
-                progress(f"{m['w']}x{m['h']} {enc}")
-            ok, speed, why = benchmark(cfg, m, enc, workdir)
-            results.append({**m, "encoder": enc, "ok": ok, "speed": speed, "why": why})
-            log.info("test %dx%d@%g %s: %s", m["w"], m["h"], m["fps"], enc,
-                     f"{speed:.2f}x real time" if ok else f"failed ({why})")
-            if ok:
-                this = {**m, "encoder": enc, "speed": round(speed, 2)}
-                if fallback is None or speed > fallback["speed"]:
-                    fallback = this
-                if speed >= MIN_SPEED or forced:
-                    choice = this
-                    break
+
+    def test(m, enc):
+        nonlocal fallback
+        if progress:
+            progress(f"{m['w']}x{m['h']} {enc}")
+        ok, speed, why = benchmark(cfg, m, enc, workdir)
+        results.append({**m, "encoder": enc, "ok": ok, "speed": speed, "why": why})
+        log.info("test %dx%d@%g %s: %s", m["w"], m["h"], m["fps"], enc,
+                 f"{speed:.2f}x real time" if ok else f"failed ({why})")
+        if not ok:
+            return None
+        this = {**m, "encoder": enc, "speed": round(speed, 2)}
+        if fallback is None or speed > fallback["speed"]:
+            fallback = this
+        need = MIN_SPEED["sw" if enc.startswith("libx264") else "hw"]
+        return this if speed >= need else None
+
+    hw = [e for e in encoders if not e.startswith("libx264")]
+    sw = [e for e in encoders if e.startswith("libx264")]       # best quality first
+    for m in cands[:5]:                                          # biggest picture first
+        for enc in hw:
+            choice = test(m, enc)
+            if choice:
+                break
+        if not choice and sw:
+            # the fastest setting first: if even that can't keep up at this size,
+            # the better ones can't either, so go straight to the next size
+            fastest = test(m, sw[-1])
+            if fastest:
+                choice = fastest
+                for enc in sw[:-1]:
+                    better = test(m, enc)
+                    if better:
+                        choice = better
+                        break
         if choice:
             break
     if choice is None:
         if fallback is None:
             raise RuntimeError("no working H.264 encoder: " + "; ".join(r["why"] for r in results))
         choice = fallback
-        log.warning("nothing reached %.1fx real time; using the fastest: %s", MIN_SPEED, choice)
+        log.warning("nothing was fast enough; using the fastest: %s", choice)
     log.info("recording format: %dx%d @ %g fps, %s", choice["w"], choice["h"], choice["fps"],
              choice["encoder"])
     try:
@@ -221,7 +298,10 @@ def benchmark(cfg, mode, encoder, workdir, seconds=4.0):
                + ["-c:a", "aac", "-b:a", cfg["audio_bitrate"],
                   "-f", "tee", f"[f=mpegts:onfail=ignore]{part}"])
         t = time.monotonic()
-        r = subprocess.run(cmd, capture_output=True, timeout=seconds * 15)
+        try:      # far slower than real time is hopeless anyway: don't wait for it
+            r = subprocess.run(cmd, capture_output=True, timeout=max(20, seconds * 5))
+        except subprocess.TimeoutExpired:
+            return False, 0.0, "much too slow"
         took = time.monotonic() - t
         if r.returncode != 0:
             return False, 0.0, r.stderr.decode(errors="replace").strip()[-200:]

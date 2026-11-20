@@ -153,17 +153,36 @@ def check_copy(path, throttle=None, abort=None):
             "error_sample": errors[:3]}
 
 
-def remux_to_mp4(src, dst, timeout=900):
+def creation_time(name):
+    """'2026-11-20_21-04-33.mp4' (local time) -> '2026-11-20T10:04:33Z' (UTC), for
+    the date inside the MP4, which Photos and Finder use. None if not a date."""
+    m = re.match(r"(\d{4}-\d\d-\d\d_\d\d-\d\d-\d\d)", os.path.basename(name))
+    if not m:
+        return None
+    try:
+        t = time.mktime(time.strptime(m.group(1), "%Y-%m-%d_%H-%M-%S"))
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+    except (ValueError, OverflowError):
+        return None
+
+
+def remux_to_mp4(src, dst, timeout=900, when=None):
     """Recording (MPEG-TS) -> standard MP4 (H.264 + AAC) that plays on
     iPhone/Mac. No re-encoding. Written via dst.tmp, fsynced, then renamed."""
     tmp = dst + ".tmp"
+    # the exact start time if known (no daylight-saving guesswork), else the name
+    when = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(when)) if when \
+        else creation_time(dst)
+    meta = ["-metadata", f"creation_time={when}"] if when else []
     try:
         r = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-y", "-i", src,
-                            "-map", "0:v?", "-map", "0:a?", "-c", "copy",
+                            "-map", "0:v?", "-map", "0:a?", "-c", "copy"] + meta + [
                             # Fill in decode times the Pi's hardware encoder can leave
                             # out (Apple players refuse those files; Chrome doesn't mind).
                             "-bsf:v", r"setts=dts=if(eq(DTS\,NOPTS)\,PTS\,DTS)",
-                            # index at the front: plays straight away in Safari
+                            # 'avc1' video in an Apple-friendly MP4 ("mp42"), with the
+                            # index at the front so it plays straight away
+                            "-tag:v", "avc1", "-brand", "mp42",
                             "-movflags", "+faststart",
                             "-f", "mp4", tmp], capture_output=True, timeout=timeout)
         if r.returncode != 0:

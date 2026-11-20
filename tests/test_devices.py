@@ -123,7 +123,44 @@ def test_portrait_sizes_and_filters():
     with tempfile.TemporaryDirectory() as tmp:
         f = video.video_filter(dict(cfg, timestamp=True), 1920, 1080, tmp)
     # turned/cropped first, so the date/time is upright and inside the picture
-    assert f.index("crop=") < f.index("drawtext") and f.startswith("format=yuv420p")
+    assert f.index("crop=") < f.index("drawtext") and f.startswith("scale=out_color_matrix=bt709:out_range=tv,format=yuv420p")
+
+
+def test_apple_friendly_encoding():
+    cfg = config.load(overrides={"settings_file": "/nonexistent"})
+    args = video.encoder_args(cfg, "libx264:veryfast", 1920, 1080, 30)
+    s = " ".join(args)
+    assert "-profile:v high" in s and "-level:v 4.1" in s and "-preset veryfast" in s
+    assert "-colorspace bt709" in s and "-color_range tv" in s
+    from booth import media
+    assert media.creation_time("/x/2026-11-20_21-04-33.mp4").endswith("Z")
+    assert media.creation_time("holiday.mp4") is None
+    assert video.describe_encoder("libx264:superfast") == "software superfast"
+
+
+def test_choice_keeps_up_and_tests_little():
+    """Pi 5 style (software only): best quality that keeps up; skip hopeless sizes."""
+    speeds = {(1920, "ultrafast"): 1.2,                       # 1080p: too slow even at fastest
+              (1280, "ultrafast"): 3.0, (1280, "veryfast"): 1.4, (1280, "superfast"): 1.9}
+    tried = []
+
+    def fake_bench(cfg, m, enc, workdir, seconds=4.0):
+        tried.append((m["w"], enc))
+        return True, speeds.get((m["w"], enc.split(":")[1]), 0.5), ""
+    cfg = config.load(overrides={"settings_file": "/nonexistent"})
+    with tempfile.TemporaryDirectory() as tmp, \
+            mock.patch.object(devices, "_v4l2", fake_v4l2), \
+            mock.patch.object(video, "benchmark", fake_bench), \
+            mock.patch.object(video, "available_encoders",
+                              lambda: ["libx264:veryfast", "libx264:superfast", "libx264:ultrafast"]):
+        c = video.choose(cfg, "/dev/video0", tmp)
+        assert (c["w"], c["encoder"]) == (1280, "libx264:superfast"), c
+        assert (1920, "libx264:veryfast") not in tried, "1080p better settings not tried"
+        # a fixed size that can't keep up: the fastest setting, not the best-quality one
+        cfg["video_size"] = "1920x1080"
+        tried.clear()
+        c = video.choose(cfg, "/dev/video0", tmp)
+        assert (c["w"], c["encoder"]) == (1920, "libx264:ultrafast"), c
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Confession Booth (Raspberry Pi 3B+)
+# Confession Booth (Raspberry Pi 5, also 4 / 3B+)
 
 A reality-TV "confession booth" for a party. Guests step in front of the webcam, tap the touch
 screen (or press a big red button, if you fit one), get a 3-2-1 countdown, say their piece, and
@@ -55,7 +55,7 @@ Starts by itself when the Pi is switched on. Recordings stop by themselves after
 
 | Part | Notes |
 |------|-------|
-| Raspberry Pi 3B+ | Raspberry Pi OS **Lite** (Bookworm or newer, 32 or 64-bit) on a 32 GB+ microSD |
+| Raspberry Pi 5 (or 4 / 3B+) | Raspberry Pi OS (Bookworm or newer, 64-bit; Lite or desktop) on a 32 GB+ microSD (A2 class) |
 | USB webcam with a microphone | One that sends MJPEG (nearly all HD webcams: Logitech C270/C920/C922/Brio etc.) |
 | Small touch screen | The official DSI touchscreen or an HDMI screen with USB touch work best (any resolution; 800×480 is ideal). SPI "GPIO" screens are slow. Without touch, use the button |
 | USB SSD | exFAT (readable on Mac and Windows) or ext4. Name it e.g. `CONFESSIONS` |
@@ -71,10 +71,15 @@ unplugging and replugging one, makes the booth restart itself to fit it (a few s
 until nobody is recording). With no screen connected at power-on it waits for one (the web page
 starts once a screen is there).
 
-**Power matters.** The Pi 3B+ shares about 1.2 A between all four USB ports. A webcam plus a
-2.5" SSD can pull more than that and brown out, which corrupts files. Use the official supply and
-put the SSD (or both) on a powered USB hub. The booth checks for under-voltage and shows a yellow
-⚡ in the status bar if it has happened since boot.
+**Power matters.**
+- **Pi 5:** use the **official 27 W (5 V 5 A) USB-C supply**. With a weaker (3 A) supply the Pi 5
+  limits all its USB ports together to 600 mA, which isn't enough for a webcam plus an SSD: the
+  SSD can drop out mid-recording. Plug the SSD into a **blue (USB 3)** port.
+- **Pi 3B+ / 4:** they share about 1.2 A between the USB ports; use the official supply and put a
+  2.5" SSD on a powered USB hub.
+
+The booth checks for under-voltage and shows a yellow ⚡ (and a warning on the web page) if it has
+happened since boot.
 
 ## Wiring (only for the physical button)
 
@@ -163,9 +168,15 @@ version is kept as `booth.prev`), and it waits if someone is recording.
 | SSD | `Confessions/` on the SSD (mounted on the Pi at `/mnt/booth-ssd`) |
 | microSD | `/srv/confessions` |
 
-Files are **MP4 (H.264 video + AAC sound)**, the same kind an iPhone records, so they play in
-QuickTime, Photos, iMovie, on iPhones (AirDrop, Files) and in every editor. Each file is named
-with just the date and time it was recorded, e.g. `2026-11-11_21-04-33.mp4`.
+Files are **MP4 (H.264 High profile video + AAC sound)**, the same kind an iPhone records, so they
+play in QuickTime, Photos, iMovie, Final Cut, Premiere, CapCut, on iPhones (AirDrop, Files, Save
+Video to Photos) and everywhere else:
+- standard HD colour (BT.709, labelled), so colours look the same on a Mac, an iPhone and a TV;
+- the index is at the start of the file, so it plays straight away in Safari / while downloading;
+- the recording date and time is stored inside the file, so Photos and Finder sort it correctly;
+- every file is checked for iPhone compatibility after saving (the web page warns if one isn't).
+
+Each file is named with just the date and time it was recorded, e.g. `2026-11-11_21-04-33.mp4`.
 
 **Portrait or landscape:** web page → Camera → Orientation. Portrait makes upright, phone-shaped
 videos (e.g. 1080×1920) and turns the booth screen too:
@@ -180,10 +191,13 @@ videos (e.g. 1080×1920) and turns the booth screen too:
   resolution the Pi can record turned. The live view on the web page is shown the same way up as
   the recording.
 
-**Resolution:** the booth asks the webcam what it can do and uses its highest resolution, as long
-as this Pi can record it smoothly. The Pi 3B+'s hardware video encoder goes up to 1080p, so a 4K
-webcam records at 1920×1080. At first start each size is test-encoded for a few seconds (with the
-timestamp on, if it's on) and the biggest one that runs comfortably faster than real time is used.
+**Resolution and quality:** the booth asks the webcam what it can do and uses its highest
+resolution (up to 1080p) that this Pi can record smoothly. A **Pi 5** has no hardware video encoder,
+so it encodes with x264 on its processor, using the best-quality x264 setting that still keeps up
+(smaller files, quicker downloads), with headroom left for the camera preview and the screen. A
+Pi 3B+/4 uses its hardware encoder. At first start (and after camera or orientation changes) each
+option is test-encoded for a few seconds and the result remembered; the fastest setting is tried
+first so this only takes a minute or two.
 You can pick a fixed size on the web page (Camera tab) instead; the Booth tab shows what is
 being recorded now.
 

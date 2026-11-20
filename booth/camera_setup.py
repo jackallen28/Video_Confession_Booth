@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import sys
 
-from . import config, devices, media
+from . import config, devices, media, video
 from .config import size_tuple
 
 CORNERS = ["bottom-right", "bottom-left", "top-left", "top-right"]
@@ -63,7 +63,7 @@ class Setup:
         try:
             with open(os.path.join(self.cfg["state_dir"], "video-check.json")) as f:
                 c = json.load(f)["choice"]
-            return f"{c['w']}x{c['h']} @ {c['fps']:g} fps ({c['encoder']})"
+            return f"{c['w']}x{c['h']} @ {c['fps']:g} fps ({video.describe_encoder(c['encoder'])})"
         except (OSError, ValueError, KeyError):
             return "not tested yet"
 

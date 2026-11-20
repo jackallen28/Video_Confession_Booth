@@ -99,7 +99,9 @@ class Web:
             "state": app.state,
             "recording_seconds": round(rec.elapsed(), 1) if rec and app.state == "recording" else 0,
             "camera": {"name": devices.camera_name(app.device) if app.device else None,
-                       "ok": bool(cam and cam.ok), "mode": app.mode},
+                       "ok": bool(cam and cam.ok), "mode": app.mode,
+                       "encoder": video.describe_encoder(app.mode["encoder"])
+                       if app.mode else None},
             "mic": app.mic,
             "drives": {k: {"present": v["present"], "level": v["level"], "free": v["free"],
                            "free_text": media.human_bytes(v["free"]) if v["present"] else "—",

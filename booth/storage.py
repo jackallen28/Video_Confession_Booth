@@ -355,7 +355,7 @@ class Storage:
             except OSError as e:
                 log.error("%s: %s copy unreadable: %s", name, drive_name, e)
                 return
-            ok, why = media.remux_to_mp4(part, final)
+            ok, why = media.remux_to_mp4(part, final, when=result.get("started"))
             if not ok:
                 log.error("%s: MP4 on %s failed (%s); keeping the raw .ts", name, drive_name, why)
                 try:
