@@ -52,7 +52,7 @@ FIELDS = [
          options=["touch", "button", "both"], apply="restart",
          help="Tap anywhere on the screen, the physical red button (and its light), or either"),
     dict(key="waiting_theme", group="Screen", label="Waiting screen (physical button)",
-         type="select", options=["confessional", "neon", "spotlight", "drama", "hand", "fessup"],
+         type="select", options=["confessional", "neon", "spotlight", "drama", "fessup"],
          apply="live"),
     dict(key="start_animation", group="Screen", label="Before recording", type="select",
          options=["countdown", "clapperboard", "both", "none"], apply="live"),

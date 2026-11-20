@@ -126,13 +126,11 @@ DEFAULTS = {
     # full, i.e. under low_free_mb), "problems" (also for drive faults, missing
     # SSD/mic, power warnings) or "always".
     "status_bar": "when_full",
-    "button_hint_x": 0.86,       # (no longer used: there's no arrow)
     # Physical button: the waiting screen. confessional, neon, spotlight,
-    # drama (reality-TV styles with "Press button to begin recording") or hand.
+    # drama (reality-TV styles with "Press button to begin recording") or fessup.
     "waiting_theme": "confessional",
     "waiting_title": "Press button",
     "waiting_subtitle": "to begin recording",
-    "waiting_arrow": False,      # (no longer used)
     "fullscreen": True,
     # Screens bigger than this (e.g. a 1080p TV) are drawn at this size and
     # scaled up by the GPU, which keeps the booth smooth on a Pi 3B+.

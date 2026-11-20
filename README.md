@@ -13,14 +13,14 @@ everything a press of the button does below ("hold" = keep a finger on the scree
 physical red button instead, or both, change **Screen → Start/stop with** on the web page (the
 booth restarts). The button's light is only used with the physical button.
 
-![Physical button mode: waiting screen with the hand, TV switching on, recording, saving over snippets, hold to delete, saved](docs/button-mode.png)
+![Physical button mode: waiting screen, TV switching on, recording, saving over snippets, hold to delete, saved](docs/button-mode.png)
 
 - **Waiting:**
-  - ![Waiting screens: Confessional (default), Neon sign, Spotlight](docs/waiting-screens.png)
+  - ![Waiting screens: Confessional (default), Fess Up!, Neon sign](docs/waiting-screens.png)
   - *Physical button:* a reality-TV style screen saying **"Press button to begin recording"**.
     Choose the style on the web page (Screen →
     *Waiting screen*): **Confessional** (glowing pink bokeh, the default), **Neon sign**,
-    **Spotlight**, **Drama** (spinning sunburst), a little **hand** pressing an arcade button, or
+    **Spotlight**, **Drama** (spinning sunburst), or
     **Fess Up!**: a paper star and the words stuck on one by one, scrapbook style, then
     "Go on, press the button" pulses softly for 10 s and it starts again. (Fess Up! uses its own
     artwork, so the "Words on screen" waiting-screen lines don't change it.)

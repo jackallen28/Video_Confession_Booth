@@ -253,8 +253,8 @@ class App:
 
     @property
     def black_idle(self):
-        """Physical button in use: wait on a black screen with the little hand
-        pointing at the real button, and switch the picture on like an old TV."""
+        """Physical button in use: wait on a waiting screen (no camera picture),
+        and switch the picture on like an old TV."""
         return uses_button(self.cfg)
 
     def _tvon(self):
@@ -612,11 +612,9 @@ class App:
     def _draw_waiting(self, now):
         """What the booth shows while waiting for the next guest."""
         theme = self.cfg["waiting_theme"]
-        if self.black_idle and theme in themes.THEMES and theme != "hand":
-            self.waiting.draw(now, theme, self.cfg["button_hint_x"], self.led_level("idle", now))
-        elif self.black_idle:
-            self.ui.press_hint(now, self.press_t is not None, self.cfg["button_hint_x"],
-                               glow=self.led_level("idle", now))
+        if self.black_idle:
+            # (an old saved choice like the removed "hand" screen: the default one)
+            self.waiting.draw(now, theme if theme in themes.THEMES else "confessional")
         else:
             self._draw_camera(now)
 

@@ -5,7 +5,6 @@ in reality-TV styles. Chosen on the web page: Screen -> Waiting screen.
     neon          flickering pink and blue neon sign on a dark wall
     spotlight     sweeping gold stage spotlights and sparkles
     drama         spinning hot-pink sunburst title card
-    hand          the little hand pressing a glowing arcade button
     fessup        "FESS UP!": a paper star and the words stuck on, scrapbook style,
                   "Go on, press the button" pulsing; replays every ~13 s
 
@@ -23,7 +22,7 @@ import random
 import pygame
 import pygame.gfxdraw
 
-THEMES = ["confessional", "neon", "spotlight", "drama", "hand", "fessup"]
+THEMES = ["confessional", "neon", "spotlight", "drama", "fessup"]
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 FONT_FILES = {
@@ -157,7 +156,7 @@ class WaitingScreen:
         self.rng = random.Random(7)
 
     # ------------------------------------------------------------- drawing
-    def draw(self, t, theme, x_frac, glow_level):
+    def draw(self, t, theme):
         key = (theme, self.cfg.get("waiting_title"), self.cfg.get("waiting_subtitle"))
         if self._built != key:
             getattr(self, f"_build_{theme}")()
@@ -415,9 +414,3 @@ class WaitingScreen:
                 scr.blit(shadow, rect.move(round(off * 0.6), round(off)))
             scr.blit(spr, rect)                  # paper: solid from the first frame
 
-    # ------------------------------------------------------------- 5. hand
-    def _build_hand(self):
-        pass
-
-    def _draw_hand(self, t):
-        pass                        # drawn by UI.press_hint

@@ -21,21 +21,21 @@ def test_all_themes_draw():
     assert set(opts) == set(themes.THEMES), "web page and themes disagree"
     for size in ((1024, 600), (600, 1024), (800, 480)):
         screen = pygame.display.set_mode(size)
-        ws = themes.WaitingScreen(screen, {"waiting_arrow": True})
+        ws = themes.WaitingScreen(screen, {})
         for theme in themes.THEMES:
             for t in (0.0, 0.3, 1.0, 1.7, 2.5, 7.0, 12.3, 12.8, 13.5, 30.0):
-                ws.draw(100 + t, theme, 0.86, 0.5)
+                ws.draw(100 + t, theme)
 
 
 def test_fessup_sequence():
     """Star first, then FESS UP!, then the small line; it holds, fades, starts over."""
     pygame.init()
     screen = pygame.display.set_mode((1024, 600))
-    ws = themes.WaitingScreen(screen, {"waiting_arrow": False})
+    ws = themes.WaitingScreen(screen, {})
     red = themes.WaitingScreen.FESS_RED
 
     def at(t):
-        ws.draw(50 + t, "fessup", 0.86, 0.5)
+        ws.draw(50 + t, "fessup")
         return screen.get_at((512, 300))[:3], screen.get_at((314, 269))[:3], \
             screen.get_at((462, 356))[:3]
 
