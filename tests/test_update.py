@@ -45,6 +45,7 @@ stub("nmcli", '''case "$*" in
   *"GENERAL.STATE connection show booth-ap"*) echo activated ;;
   *"connection.autoconnect connection show booth-ap"*) echo yes ;;
   *"device wifi list"*) printf 'OtherNet\\nJack\\xe2\\x80\\x99s iPhone\\n' ;;
+  *"connection up booth-update-hotspot"*) [ -e "$BOOTH_TEST_ROOT/wrong-password" ] && exit 4 ;;
 esac
 exit 0''')
 stub("systemctl", '''case "$*" in
@@ -54,6 +55,8 @@ stub("systemctl", '''case "$*" in
 esac
 exit 0''' % (ROOT, ROOT, ROOT))
 os.environ["PATH"] = STUBS + ":" + os.environ["PATH"]
+os.environ["BOOTH_TEST_ROOT"] = ROOT
+updater.FIND_SECONDS = 2          # keep the "hotspot missing" test quick
 
 
 def fresh():
@@ -167,6 +170,27 @@ assert result(cfg)["state"] == "failed" and "couldn't see the hotspot" in result
 assert git("rev-parse", "HEAD", cwd=src) == before
 assert "connection up booth-ap" in calls() and "systemctl restart" in calls()
 print("ok  hotspot missing: nothing changed, booth Wi-Fi back on")
+
+# --- 3b. hotspot there but joining fails (wrong password): ONE attempt, then straight back
+updater.save_hotspot("Jack's iPhone", "wrongpass")
+src, newest = make_repos("badpass")
+before = git("rev-parse", "HEAD", cwd=src)
+u, cfg = new_updater("badpass", src, online_after_hotspot=True)
+open(os.path.join(ROOT, "wrong-password"), "w").close()
+fresh()
+t0 = time.monotonic()
+assert u.go() == 1
+os.remove(os.path.join(ROOT, "wrong-password"))
+c = calls()
+assert c.count("connection up booth-update-hotspot") == 1, c
+assert c.rindex("connection up booth-ap") > c.rindex("connection up booth-update-hotspot")
+assert "connection delete booth-update-hotspot" in c
+r = result(cfg)
+assert r["state"] == "failed" and r["message"].startswith("Update failed") \
+    and "wrong password" in r["message"], r
+assert git("rev-parse", "HEAD", cwd=src) == before
+assert time.monotonic() - t0 < 30
+print("ok  wrong hotspot password: one try, booth Wi-Fi straight back, 'Update failed'")
 
 # --- 4. new version doesn't keep running: previous one restored
 src, newest = make_repos("rollback")

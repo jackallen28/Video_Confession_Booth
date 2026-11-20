@@ -38,6 +38,11 @@ SERVICE = "confession-booth"
 AP = "booth-ap"
 HOTSPOT_CON = "booth-update-hotspot"
 IFACE = "wlan0"
+# How long the booth is allowed off its own Wi-Fi looking for the hotspot. One
+# attempt only: if it can't, it goes straight back so you can reconnect and retry.
+FIND_SECONDS = 20          # looking for the hotspot's name
+JOIN_SECONDS = 30          # one attempt to join it
+ONLINE_SECONDS = 20        # internet through it
 BUSY = ("countdown", "recording", "stopping", "review", "confirm", "deleted", "shutdown")
 
 
@@ -145,14 +150,14 @@ class Updater:
     def join_hotspot(self, hs):
         self.status("working", f"Looking for the hotspot \"{hs['name']}\"…")
         ssid = None
-        end = time.monotonic() + 60
+        end = time.monotonic() + FIND_SECONDS
         while time.monotonic() < end and not ssid:
             rc, out = run(["nmcli", "-t", "-f", "SSID", "device", "wifi", "list", "--rescan",
-                           "yes"], timeout=30)
+                           "yes"], timeout=FIND_SECONDS)
             visible = [l.replace("\\:", ":") for l in out.splitlines() if l.strip()]
             ssid = pick_ssid(hs["name"], visible)
             if not ssid:
-                time.sleep(4)
+                time.sleep(3)
         if not ssid:
             raise RuntimeError(f"couldn't see the hotspot \"{hs['name']}\". Is Personal Hotspot "
                                "on, with its settings screen open?")
@@ -165,23 +170,21 @@ class Updater:
         if rc != 0:
             raise RuntimeError(f"couldn't set up the hotspot connection: {out[-200:]}")
         self.status("working", f"Joining \"{ssid}\"…")
-        for attempt in range(3):
-            rc, out = run(["nmcli", "--wait", "45", "connection", "up", HOTSPOT_CON], timeout=60)
-            if rc == 0:
-                return
-            time.sleep(5)
-        raise RuntimeError("couldn't join the hotspot (wrong password?)")
+        rc, out = run(["nmcli", "--wait", str(JOIN_SECONDS), "connection", "up", HOTSPOT_CON],
+                      timeout=JOIN_SECONDS + 10)          # one attempt only
+        if rc != 0:
+            raise RuntimeError(f"couldn't join the hotspot \"{ssid}\" (wrong password?)")
 
     def restore_wifi(self, ap_was_on):
         run(["nmcli", "connection", "down", HOTSPOT_CON], timeout=30)
         run(["nmcli", "connection", "delete", HOTSPOT_CON], timeout=20)
         if ap_was_on or self.ap_wanted():
-            for attempt in range(5):
-                rc, _ = run(["nmcli", "--wait", "30", "connection", "up", AP], timeout=45)
+            for attempt in range(6):
+                rc, _ = run(["nmcli", "--wait", "20", "connection", "up", AP], timeout=30)
                 if rc == 0:
                     log.info("booth Wi-Fi back on")
                     return True
-                time.sleep(5)
+                time.sleep(3)
             log.error("booth Wi-Fi didn't come back; it will at the next power-on")
             return False
         run(["nmcli", "device", "connect", IFACE], timeout=45)
@@ -215,7 +218,7 @@ class Updater:
             raise RuntimeError(f"the copy in {src} has local changes; not touching it")
         old = run(["git", "-C", src, "rev-parse", "--short", "HEAD"], user=owner)[1]
         self.status("working", "Downloading the new version…")
-        rc, out = run(["git", "-C", src, "fetch", "--prune", "origin"], timeout=300, user=owner)
+        rc, out = run(["git", "-C", src, "fetch", "--prune", "origin"], timeout=180, user=owner)
         if rc != 0:
             raise RuntimeError(f"download failed: {out[-200:]}")
         rc, out = run(["git", "-C", src, "merge", "--ff-only", f"origin/{branch}"],
@@ -306,11 +309,12 @@ class Updater:
                     run(["nmcli", "connection", "down", AP], timeout=30)
                 switched = True
                 self.join_hotspot(hs)
-                end = time.monotonic() + 40
+                end = time.monotonic() + ONLINE_SECONDS
                 while not self.online(src, owner):
                     if time.monotonic() > end:
-                        raise RuntimeError("joined the hotspot but there's no internet through it")
-                    time.sleep(4)
+                        raise RuntimeError("joined the hotspot but there's no internet through "
+                                           "it (is mobile data on?)")
+                    time.sleep(3)
             old, new = self.git_update(src, owner)
             if old == new and installed_version(self.app_dir).split()[0:1] == [new]:
                 result = f"Already up to date ({new})."
@@ -348,6 +352,9 @@ def launch(cfg):
     """Start the updater in its own systemd unit (survives the booth restarting)."""
     if not shutil.which("systemd-run") or os.geteuid() != 0:
         raise RuntimeError("updates only run on the Pi (as root, with systemd)")
+    if run(["systemctl", "is-active", "booth-update"], timeout=10)[1].strip() in (
+            "active", "activating"):
+        raise RuntimeError("an update is already running")      # only ever one at a time
     rc, out = run(["systemd-run", "--unit", "booth-update", "--collect",
                    "--description", "Confession booth software update",
                    "--working-directory", APP_DIR, sys.executable, "-m", "booth.updater",

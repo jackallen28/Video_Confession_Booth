@@ -137,8 +137,11 @@ that screen), and tap **Update now**. The booth:
 
 1. waits until nobody is recording or saving, lets its background checks finish, saves its
    records and shows *UPDATING* on the screen;
-2. switches its own Wi-Fi off and joins your hotspot (if it already has internet, e.g. a network
-   cable, it skips this);
+2. switches its own Wi-Fi off and makes **one** attempt to join your hotspot: it looks for it for
+   up to 20 s, tries to join once (up to 30 s) and checks there's internet through it (up to
+   20 s). If any of that fails, the booth Wi-Fi comes **straight back** (about a minute at most
+   off the air), nothing has been changed, and you can reconnect and tap **Try again**. (If it
+   already has internet, e.g. a network cable, it skips this.) Only one update runs at a time;
 3. downloads the new version and installs it (system packages only if one is missing, to save
    mobile data);
 4. turns its own Wi-Fi back on (always, even if something went wrong) and restarts. If anything
