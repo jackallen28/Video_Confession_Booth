@@ -248,6 +248,46 @@ def test_guest_delete():
         assert os.path.exists(st.sd.path(name)) and os.path.exists(st.ssd.path(name))
 
 
+def test_smart_check_is_not_an_ssd_error():
+    """USB adapters that refuse SMART make the kernel count I/O errors; those must
+    not mark the SSD as failing. Real errors still do, logged once, and a re-plugged
+    drive starts clean."""
+    from unittest import mock
+    from booth import storage
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp)
+        st.auto = True
+        cnt = {"n": 5}
+        real_exists = os.path.exists
+
+        def smartctl(cmd, timeout=30):
+            if cmd[0] == "smartctl":
+                cnt["n"] += 1                      # the adapter refuses: kernel counts it
+                return 2, "unsupported"
+            return 0, ""
+        with mock.patch.object(storage, "mount_entry", return_value=("/dev/sda4", "exfat", "rw")), \
+                mock.patch.object(storage.os.path, "exists",
+                                  lambda p: p == "/dev/sda4" or real_exists(p)), \
+                mock.patch.object(storage, "read_ioerr", lambda dev: cnt["n"]), \
+                mock.patch.object(storage, "disk_sysfs", return_value="/sys/block/sda"), \
+                mock.patch.object(storage.shutil, "which", return_value="/usr/sbin/smartctl"), \
+                mock.patch.object(storage, "run", smartctl):
+            st._check_ssd()
+            assert st.ssd.device == "/dev/sda4" and not st.ssd.errors
+            st._smart()
+            st._check_ssd()
+            assert cnt["n"] == 7 and not st.ssd.errors, st.ssd.errors
+            assert st._no_smart                    # not tried again on this drive
+            st._smart()
+            assert cnt["n"] == 7
+            cnt["n"] += 1                          # a real error
+            st._check_ssd()
+            assert st.ssd.errors.get("io") == "1 I/O errors", st.ssd.errors
+            cnt["n"] = 0                           # re-plugged: the kernel's count restarts
+            st._check_ssd()
+            assert "io" not in st.ssd.errors
+
+
 if __name__ == "__main__":
     for fn in [v for k, v in sorted(globals().items()) if k.startswith("test_")]:
         t = time.monotonic()

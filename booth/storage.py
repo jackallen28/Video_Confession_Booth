@@ -228,6 +228,7 @@ class Storage:
         self.wiping = False                  # "wipe all videos" in progress
         self._hlock = threading.Lock()       # health checks vs. eject
         self._ioerr = {}
+        self._no_smart = False
         self._last = {"write": 0.0, "scrub": time.monotonic(), "smart": 0.0}
         self._scrub_pos = 0
         self._ssd_device = None
@@ -593,6 +594,7 @@ class Storage:
             self._ssd_device = dev
             d.errors.clear()
             self._ioerr[dev] = read_ioerr(dev)
+            self._no_smart = False
             log.info("SSD %s (%s) mounted at %s", dev, fstype, self.mountpoint)
         d.present = True
         d.device = dev
@@ -600,9 +602,14 @@ class Storage:
             d.errors["readonly"] = "drive went read-only (filesystem errors?)"
         n = read_ioerr(dev)
         base = self._ioerr.get(dev)
+        if n is not None and base is not None and n < base:    # drive re-plugged: count reset
+            self._ioerr[dev] = base = n
+            d.errors.pop("io", None)
         if n is not None and base is not None and n > base:
-            d.errors["io"] = f"{n - base} I/O errors"
-            log.error("SSD I/O errors: %d", n - base)
+            msg = f"{n - base} I/O errors"
+            if d.errors.get("io") != msg:            # log when it changes, not every 15 s
+                log.error("SSD I/O errors: %d (see: dmesg | grep -i sd)", n - base)
+            d.errors["io"] = msg
         try:
             os.makedirs(d.video_dir, exist_ok=True)
         except OSError as e:
@@ -676,21 +683,33 @@ class Storage:
             d.errors["write"] = f"write test failed: {e}"
 
     def _smart(self):
-        if not shutil.which("smartctl") or not self.ssd.device:
+        if not shutil.which("smartctl") or not self.ssd.device or self._no_smart:
             return
         disk = disk_sysfs(self.ssd.device)
         if not disk:
             return
         dev = "/dev/" + os.path.basename(disk)
-        for extra in (["-d", "sat"], []):
-            rc, out = run(["smartctl", "-H"] + extra + [dev], timeout=60)
-            if rc >= 0 and not rc & 3:
-                if rc & 8:
-                    self.ssd.errors["smart"] = "SMART says the drive is failing"
-                    log.error("SMART: %s", out[-300:])
-                else:
-                    self.ssd.errors.pop("smart", None)
-                return
+        # Many USB-SATA adapters don't pass SMART through: the kernel then counts the
+        # refused requests as I/O errors. Those aren't drive faults, so don't count them.
+        before = read_ioerr(self.ssd.device)
+        try:
+            for extra in (["-d", "sat"], []):
+                rc, out = run(["smartctl", "-H"] + extra + [dev], timeout=60)
+                if rc >= 0 and not rc & 3:
+                    if rc & 8:
+                        self.ssd.errors["smart"] = "SMART says the drive is failing"
+                        log.error("SMART: %s", out[-300:])
+                    else:
+                        self.ssd.errors.pop("smart", None)
+                    return
+            log.info("this SSD's USB adapter doesn't support SMART health checks; skipping them")
+            self._no_smart = True
+        finally:
+            after = read_ioerr(self.ssd.device)
+            if before is not None and after is not None and after > before:
+                base = self._ioerr.get(self.ssd.device)
+                if base is not None:
+                    self._ioerr[self.ssd.device] = base + (after - before)
 
     # ---------------------------------------------------------------- worker
     def _throttle(self):
