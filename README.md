@@ -322,6 +322,26 @@ are in [`config.example.toml`](config.example.toml)); after changing them:
   unfinished recordings are recovered at the next start.
 - Updates only replace the program, never the video folders.
 
+### The SSD tab
+
+Web page → **SSD** shows the drive, its connection (USB 3 or 2), its adapter and any warning.
+
+- **Quick check** (1–3 min): connection, power, the system's error messages about the drive
+  (with what they mean), a filesystem check, and a 256 MB write/read test. The SSD goes offline
+  for about a minute; anything recorded meanwhile goes to the microSD and is copied over after.
+- **Full scan** (slow): reads every part of the drive, read-only. Pauses whenever someone records.
+- **Health report**: the drive's own SMART report, if its USB adapter passes it through. Many
+  adapters don't, and then fail the next few requests, which used to show up as
+  *"SSD I/O errors"* every 30 minutes. The booth no longer asks automatically
+  (`smart_interval`, 0 = off).
+- **Clear the warning**: while the SSD has a warning the booth records to the microSD. Once a
+  Quick check says the drive is fine, clear it to use the SSD again.
+- **Repair**: fixes filesystem errors in place.
+- **Reformat** (type FORMAT): one GPT partition, exFAT, named **CONFESSIONS** (Mac, Windows and
+  the Pi can all read it). The whole drive is erased, including other partitions, which the page
+  lists first. Every video on the SSD is copied to the microSD and checked beforehand; if there
+  isn't room, nothing is touched. Afterwards the booth copies the videos back onto the SSD.
+
 ## How the files are checked
 
 1. While recording, each drive gets `name.ts.part` (MPEG-TS survives a power cut). When the
@@ -392,6 +412,7 @@ Tests:
 ```bash
 python3 tests/test_storage.py      # MP4 + names, verification, SSD unplugged then back, corruption repair, crash recovery, delete
 python3 tests/test_devices.py      # reading the webcam's modes and controls, resolution choice
+sudo python3 tests/test_ssd.py     # SSD tab: check, refuse without room, reformat (on a fake disk)
 python3 tests/test_recorder.py     # smooth, right-length video at any camera frame rate; sound in step
 python3 tests/test_touch.py        # the touch screen: tap, two fingers, hold + tap again to delete
 python3 tests/test_display.py      # fitting the screen; restart for a new screen, never mid-recording

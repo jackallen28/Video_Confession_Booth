@@ -30,7 +30,7 @@ import time
 import urllib.parse
 import zipfile
 
-from . import config, devices, media, settings, updater, video
+from . import config, devices, media, settings, ssdcheck, updater, video
 
 log = logging.getLogger("booth.web")
 
@@ -74,6 +74,7 @@ class Web:
         self._thumb_lock = threading.Lock()
         self.streams = 0
         self.server = None
+        self.ssd = ssdcheck.SSDCheck(app.storage, self.cfg)
 
     def start(self):
         port = int(self.cfg.get("web_port") or 0)
@@ -364,6 +365,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json(web.update_info())
             elif p == "/api/log":
                 self._json({"lines": web.log_tail()})
+            elif p == "/api/ssd":
+                self._json({"drive": web.ssd.drive(), "job": web.ssd.status(),
+                            "running": web.ssd.busy(), "booth_state": web.app.state})
             else:
                 self._not_found()
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
@@ -517,6 +521,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._json({"ok": ok, "message": msg})
             elif p == "/api/action":
                 self._json(self._action(body))
+            elif p == "/api/ssd":
+                self._json(self._ssd(body))
             elif p == "/api/update":
                 if body.get("action") == "hotspot":
                     name, pw = str(body.get("name") or ""), str(body.get("password") or "")
@@ -535,6 +541,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pass
         except (ValueError, TypeError) as e:
             self._json({"error": str(e)}, 400)
+
+    def _ssd(self, body):
+        web, app = self.web, self.web.app
+        a = body.get("action")
+        if a == "cancel":
+            web.ssd.cancel()
+            return {"ok": True}
+        if a == "clear":
+            app.storage.clear_ssd_errors()
+            return {"ok": True}
+        if app.state not in ("idle", "error", "starting") or app.press_t is not None \
+                or app.storage.recording.is_set() or app.storage.held:
+            return {"ok": False, "error": "The booth is busy - try again when nobody is "
+                                          "recording or saving."}
+        if a == "format" and body.get("confirm") != "FORMAT":
+            return {"ok": False, "error": "Type FORMAT to confirm."}
+        if a == "format":
+            log.warning("SSD reformat requested from the web page (%s)", self.address_string())
+        ok, err = web.ssd.start(str(a))
+        return {"ok": ok, "error": err} if not ok else {"ok": True}
 
     def _update_start(self):
         app = self.web.app

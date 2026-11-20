@@ -272,6 +272,7 @@ def test_smart_check_is_not_an_ssd_error():
                 mock.patch.object(storage, "disk_sysfs", return_value="/sys/block/sda"), \
                 mock.patch.object(storage.shutil, "which", return_value="/usr/sbin/smartctl"), \
                 mock.patch.object(storage, "run", smartctl):
+            assert not st.cfg["smart_interval"], "automatic SMART queries should be off"
             st._check_ssd()
             assert st.ssd.device == "/dev/sda4" and not st.ssd.errors
             st._smart()
@@ -280,6 +281,7 @@ def test_smart_check_is_not_an_ssd_error():
             assert st._no_smart                    # not tried again on this drive
             st._smart()
             assert cnt["n"] == 7
+            st._forgive_until = 0                  # 90 s later: errors count again
             cnt["n"] += 1                          # a real error
             st._check_ssd()
             assert st.ssd.errors.get("io") == "1 I/O errors", st.ssd.errors

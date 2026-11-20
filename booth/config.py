@@ -113,7 +113,10 @@ DEFAULTS = {
     "health_interval": 15,
     "write_test_interval": 300,
     "scrub_interval": 600,       # re-check one saved file's checksum when idle
-    "smart_interval": 1800,
+    # Automatic SMART health queries (seconds; 0 = only from the SSD tab). Off by
+    # default: many USB-SATA adapters can't pass them through and then fail the
+    # next few requests, which shows up as "SSD I/O errors".
+    "smart_interval": 0,
     "copy_mb_per_s_while_recording": 6,
 
     # --- Screen -----------------------------------------------------------

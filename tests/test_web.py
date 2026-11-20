@@ -140,6 +140,15 @@ def checks():
         # log, clock (test mode leaves the computer's clock alone)
         assert json.loads(get("/api/log")[2])["lines"]
         assert post("/api/action", {"action": "clock", "time": time.time()})["ok"]
+        # SSD tab: drive info; format needs FORMAT typed; test mode never touches disks
+        s = json.loads(get("/api/ssd")[2])
+        assert s["drive"]["found"] is False and s["drive"]["test_mode"] and not s["running"], s
+        assert "FORMAT" in post("/api/ssd", {"action": "format"})["error"]
+        r = post("/api/ssd", {"action": "format", "confirm": "FORMAT"})
+        assert not r["ok"] and "only run on the Pi" in r["error"], r
+        assert post("/api/ssd", {"action": "clear"})["ok"]
+        page = get("/")[2].decode()
+        assert 'data-tab="ssd"' in page and 'id="ssdFormat"' in page
         print("web checks OK")
     except Exception as e:  # noqa: BLE001
         import traceback

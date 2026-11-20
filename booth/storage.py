@@ -229,6 +229,8 @@ class Storage:
         self._hlock = threading.Lock()       # health checks vs. eject
         self._ioerr = {}
         self._no_smart = False
+        self.maintenance = None      # SSD tab: SSD taken offline (check/repair/format)
+        self._forgive_until = 0.0    # I/O errors right after a SMART query aren't faults
         self._last = {"write": 0.0, "scrub": time.monotonic(), "smart": 0.0}
         self._scrub_pos = 0
         self._ssd_device = None
@@ -556,7 +558,7 @@ class Storage:
                 for d in self.drives:
                     if d.present:
                         self._write_test(d)
-            if idle and self.auto and self.ssd.present and \
+            if idle and self.auto and self.ssd.present and self.cfg["smart_interval"] and \
                     now - self._last["smart"] > self.cfg["smart_interval"]:
                 self._last["smart"] = now
                 self._smart()
@@ -569,6 +571,10 @@ class Storage:
 
     def _check_ssd(self):
         d = self.ssd
+        if self.maintenance:              # being checked/formatted from the SSD tab
+            d.present = False
+            d.free = d.total = None
+            return
         if not self.auto:
             d.present = os.path.isdir(self.mountpoint)
             if d.present:
@@ -605,6 +611,9 @@ class Storage:
         if n is not None and base is not None and n < base:    # drive re-plugged: count reset
             self._ioerr[dev] = base = n
             d.errors.pop("io", None)
+        if n is not None and base is not None and n > base and \
+                time.monotonic() < self._forgive_until:
+            self._ioerr[dev] = base = n       # caused by the SMART query just made
         if n is not None and base is not None and n > base:
             msg = f"{n - base} I/O errors"
             if d.errors.get("io") != msg:            # log when it changes, not every 15 s
@@ -690,26 +699,138 @@ class Storage:
             return
         dev = "/dev/" + os.path.basename(disk)
         # Many USB-SATA adapters don't pass SMART through: the kernel then counts the
-        # refused requests as I/O errors. Those aren't drive faults, so don't count them.
-        before = read_ioerr(self.ssd.device)
-        try:
-            for extra in (["-d", "sat"], []):
-                rc, out = run(["smartctl", "-H"] + extra + [dev], timeout=60)
-                if rc >= 0 and not rc & 3:
-                    if rc & 8:
-                        self.ssd.errors["smart"] = "SMART says the drive is failing"
-                        log.error("SMART: %s", out[-300:])
-                    else:
-                        self.ssd.errors.pop("smart", None)
-                    return
-            log.info("this SSD's USB adapter doesn't support SMART health checks; skipping them")
-            self._no_smart = True
-        finally:
-            after = read_ioerr(self.ssd.device)
-            if before is not None and after is not None and after > before:
-                base = self._ioerr.get(self.ssd.device)
-                if base is not None:
-                    self._ioerr[self.ssd.device] = base + (after - before)
+        # refused requests (and sometimes the next few) as I/O errors. Not drive faults.
+        self.forgive_io_errors()
+        for extra in (["-d", "sat"], []):
+            rc, out = run(["smartctl", "-H"] + extra + [dev], timeout=60)
+            if rc >= 0 and not rc & 3:
+                if rc & 8:
+                    self.ssd.errors["smart"] = "SMART says the drive is failing"
+                    log.error("SMART: %s", out[-300:])
+                else:
+                    self.ssd.errors.pop("smart", None)
+                self.forgive_io_errors()
+                return
+        log.info("this SSD's USB adapter doesn't support SMART health checks; skipping them")
+        self._no_smart = True
+        self.forgive_io_errors()
+
+    def forgive_io_errors(self, seconds=90):
+        """I/O errors counted in the next `seconds` come from our own SMART query."""
+        self._forgive_until = time.monotonic() + seconds
+
+    def clear_ssd_errors(self):
+        """SSD tab, after a check found the drive healthy: forget the warning."""
+        with self._hlock:
+            dev = self._ssd_device
+            if dev:
+                self._ioerr[dev] = read_ioerr(dev)
+            for k in ("io", "write", "smart"):
+                self.ssd.errors.pop(k, None)
+        log.warning("SSD warning cleared from the SSD tab")
+
+    # ------------------------------------------------------------ maintenance
+    def ssd_only(self):
+        """Every video file in the SSD's video folder (kept, guest-deleted or
+        unfinished) with no copy of the same size on the microSD. Looks at the
+        files themselves, so videos the booth doesn't know about count too."""
+        out = []
+        for sub in ("", DELETED_DIR):
+            folder = os.path.join(self.ssd.video_dir, sub)
+            try:
+                names = os.listdir(folder)
+            except OSError:
+                continue
+            for f in names:
+                if f.startswith(".") or not f.endswith((VIDEO_EXT, ".ts", PART_EXT)):
+                    continue
+                rel = os.path.join(sub, f) if sub else f
+                try:
+                    size = os.path.getsize(os.path.join(folder, f))
+                    if os.path.getsize(os.path.join(self.sd.video_dir, rel)) == size:
+                        continue
+                except OSError:
+                    pass
+                out.append(rel)
+        return out
+
+    def copy_ssd_only_to_sd(self, progress=None, abort=None):
+        """Copies (and verifies) every video that is only on the SSD to the
+        microSD. -> (ok, message)"""
+        todo = self.ssd_only()
+        need = sum(os.path.getsize(os.path.join(self.ssd.video_dir, r)) for r in todo)
+        self._check_drive(self.sd)
+        if need and (self.sd.free or 0) - need < self.min_free:
+            return False, (f"{len(todo)} videos ({media.human_bytes(need)}) are only on the SSD "
+                           f"and the microSD hasn't room for them "
+                           f"({media.human_bytes(self.sd.free)} free). Download them "
+                           "(Videos → Download all) and wipe them first.")
+        for i, rel in enumerate(todo):
+            if progress:
+                progress(i / max(1, len(todo)), f"Copying {os.path.basename(rel)} to the microSD")
+            src = os.path.join(self.ssd.video_dir, rel)
+            dst = os.path.join(self.sd.video_dir, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            want = media.sha256_file(src, abort=abort)
+            got = media.copy_file(src, dst, abort=abort)
+            if got != want:
+                os.remove(dst)
+                return False, f"copy of {rel} didn't verify; nothing was changed"
+            if rel.endswith(VIDEO_EXT) and os.sep not in rel and \
+                    (self.manifest.entry(rel) or {}).get("state") != "deleted":
+                self.queue(rel)                   # recorded as a checked microSD copy
+        os.sync()
+        return True, f"{len(todo)} videos copied to the microSD and checked"
+
+    def begin_maintenance(self, why, guard=None):
+        """Takes the SSD offline: background jobs pause, the SSD is unmounted and
+        new recordings go to the microSD. guard(): checked at the last moment,
+        with the SSD still mounted; a message from it stops. -> (ok, message)"""
+        if self.recording.is_set() or self.active_name:
+            return False, "a recording is in progress"
+        self.paused.set()
+        end = time.monotonic() + 120
+        while self.busy and time.monotonic() < end:
+            time.sleep(0.2)
+        if self.busy:
+            self.paused.clear()
+            return False, "the booth is busy checking videos; try again in a minute"
+        with self._hlock:
+            problem = guard() if guard else None
+            if problem or self.recording.is_set() or self.active_name:
+                self.paused.clear()
+                return False, problem or "a recording is in progress"
+            self.maintenance = why
+            try:
+                self.manifest.save()
+            except OSError:
+                pass
+            os.sync()
+            self.ssd.present = False
+            if self.auto and mount_entry(self.mountpoint):
+                for attempt in range(5):
+                    rc, out = run(["umount", self.mountpoint])
+                    if rc == 0:
+                        break
+                    time.sleep(1)
+                else:
+                    self.maintenance = None
+                    self.paused.clear()
+                    return False, f"couldn't unmount the SSD: {out}"
+        log.warning("SSD offline for %s (recordings go to the microSD meanwhile)", why)
+        return True, ""
+
+    def end_maintenance(self, fresh=False):
+        """SSD back online. fresh: new/repaired filesystem, so old error counts go."""
+        with self._hlock:
+            self.maintenance = None
+            if fresh:
+                self._ssd_device = None
+                self.ssd.errors.clear()
+        self.paused.clear()
+        self.refresh()
+        self.queue("__reconcile__")             # copy anything missing back to the SSD
+        log.info("SSD back online")
 
     # ---------------------------------------------------------------- worker
     def _throttle(self):

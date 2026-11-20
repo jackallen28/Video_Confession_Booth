@@ -127,6 +127,21 @@
   #toast.on { transform: translateX(-50%) translateY(0); }
   #toast.err { background: #5a2022; }
   .muted { color: var(--dim); font-size: 14px; }
+  .prog { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 10px 0 6px; }
+  .prog > i { display: block; height: 100%; background: var(--blue); transition: width .4s; }
+  .res { display: grid; grid-template-columns: 22px 1fr; gap: 2px 8px; padding: 9px 0;
+    border-top: 1px solid var(--line); }
+  .res:first-child { border-top: 0; }
+  .res .ic { font-weight: 700; text-align: center; }
+  .res .ic.ok { color: var(--green); } .res .ic.warn { color: var(--amber); }
+  .res .ic.bad { color: var(--red); } .res .ic.info { color: var(--dim); }
+  .res .d { grid-column: 2; color: var(--dim); font-size: 14px; }
+  .res details { grid-column: 2; margin-top: 4px; }
+  .res details summary { color: var(--blue); font-size: 13px; cursor: pointer; }
+  .res pre { background: #0b0b0d; border-radius: 8px; padding: 8px; font-size: 11px; line-height: 1.35;
+    max-height: 40vh; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .btns .btn { flex: 1 1 140px; }
   .hide { display: none !important; }
 </style>
 </head>
@@ -141,6 +156,7 @@
     <button data-tab="camera">Camera</button>
     <button data-tab="screen">Screen</button>
     <button data-tab="videos">Videos</button>
+    <button data-tab="ssd">SSD</button>
     <button data-tab="system">System</button>
   </nav>
 </header>
@@ -206,6 +222,45 @@
       <p class="muted" style="margin:0 2px 8px">Clips guests deleted are kept in a DELETED folder on
         each drive, never erased. Restore puts one back with the others.</p>
       <div id="delList"></div>
+    </div>
+  </section>
+
+  <!-- ===================== SSD ===================== -->
+  <section id="ssd">
+    <div class="card">
+      <h2>SSD</h2>
+      <div id="ssdInfo"><p class="muted">Looking…</p></div>
+    </div>
+    <div class="card">
+      <h2>Check</h2>
+      <p class="muted" style="margin:0 2px 4px">Checks never change your videos. During a quick
+        check the SSD goes offline for a minute; anything recorded meanwhile goes to the microSD
+        and is copied over afterwards.</p>
+      <div class="btns">
+        <button class="btn green" id="ssdCheck">Quick check</button>
+        <button class="btn" id="ssdScan">Full scan</button>
+        <button class="btn" id="ssdSmart">Health report</button>
+      </div>
+      <p class="muted" style="margin:8px 2px 0"><b>Quick check</b> (1–3 min): connection, power, the system's
+        error messages, the filesystem, and a write/read test. <b>Full scan</b> (slow): reads every part
+        of the drive (read-only; pauses while someone records). <b>Health report</b>: the drive's
+        own SMART report, if its USB adapter passes it through.</p>
+      <div id="ssdJob" style="margin-top:12px"></div>
+    </div>
+    <div class="card" style="border-color:#5a2022">
+      <h2 style="color:#ff8a8a">Repair &amp; reformat</h2>
+      <div class="row" style="border:0;padding-top:0"><span class="k"><b>Repair the filesystem</b>
+        <span class="help">Fixes filesystem errors a check found. Videos stay where they are.</span></span>
+        <button class="btn small" id="ssdRepair">Repair</button></div>
+      <div class="row"><span class="k"><b>Reformat the SSD</b>
+        <span class="help">Sets the SSD up the way the booth wants it: one exFAT partition called
+        CONFESSIONS (works on Mac, Windows and the Pi). Every video on the SSD is first copied to
+        the microSD and checked; if there isn't room it stops without touching anything. The booth
+        copies the videos back onto the SSD afterwards.</span></span></div>
+      <div id="fmtWhat" class="banner warn" style="margin:6px 0 10px"></div>
+      <div class="row"><label for="fmtWord">Type FORMAT to confirm</label>
+        <input type="text" id="fmtWord" autocomplete="off" autocapitalize="characters" placeholder="FORMAT"></div>
+      <button class="btn wide red" id="ssdFormat" disabled style="margin-top:8px">Reformat the SSD</button>
     </div>
   </section>
 
@@ -327,6 +382,7 @@ function showTab(name) {
   if (name === "camera") loadCamera();
   if (name === "camera" || name === "screen") loadSettings();
   if (name === "system") { loadLog(); loadUpdate(); }
+  if (name === "ssd") loadSSD();
   clearInterval(videosTimer);
   if (name === "videos") { loadVideos(); videosTimer = setInterval(loadVideos, 10000); }
   window.scrollTo(0, 0);
@@ -513,6 +569,119 @@ $("#upStart").addEventListener("click", async () => {
   setTimeout(loadUpdate, 1500);
 });
 setInterval(() => { if (tab === "system" && !document.hidden) loadUpdate(); }, 4000);
+
+// -------------------------------------------------------------------- SSD
+let ssd = null;
+const ICON = {ok: "✓", warn: "!", bad: "✗", info: "•"};
+const JOBNAME = {check: "Quick check", scan: "Full scan", smart: "Health report",
+                 repair: "Repair", format: "Reformat"};
+async function loadSSD() {
+  try { ssd = await api("/api/ssd"); } catch (e) { return; }
+  const d = ssd.drive, info = $("#ssdInfo");
+  if (!d.found) {
+    info.replaceChildren(el("p", {class: "muted"}, d.test_mode ? "Test mode: no real SSD here."
+      : "No SSD found. Plug it into a blue (USB 3) port; it shows up here by itself."));
+  } else {
+    const usb = d.usb || {};
+    const link = usb.speed ? (usb.speed >= 5000 ? "USB 3 ✓" : "USB 2 – use a blue port") : "—";
+    const rows = [["Drive", d.model || "USB drive"], ["Size", d.size_text],
+      ["Filesystem", (d.fstype || "?") + (d.label ? ` "${d.label}"` : "")],
+      ["Free", d.free_text], ["Connection", link],
+      ["Adapter", (usb.adapter || "—") + (usb.driver ? ` (${usb.driver})` : "")],
+      ["Status", d.maintenance ? "Offline for " + d.maintenance
+        : d.problems.length ? d.problems.join(", ") : d.mounted ? "OK" : "Not mounted"]];
+    const kids = rows.map(([k, v]) => el("div", {class: "row"}, el("span", {class: "k"}, k),
+                                         el("span", {class: "v"}, v)));
+    if (d.ideal.length) kids.push(el("p", {class: "muted", style: "margin:8px 2px 0"},
+      "Not the booth's usual set-up: " + d.ideal.join("; ") + "."));
+    if (d.problems.length && !d.maintenance) {
+      const b = el("button", {class: "btn small", style: "margin-top:10px"}, "Clear the warning");
+      b.addEventListener("click", async () => {
+        if (!confirm("Clear the SSD warning? Do this once a Quick check says the drive is OK. " +
+                     "New errors will still show.")) return;
+        await api("/api/ssd", {action: "clear"}).catch(() => {});
+        toast("Warning cleared"); loadSSD(); poll();
+      });
+      kids.push(el("p", {class: "muted", style: "margin:8px 2px 0"},
+        "While there's a warning, the booth records to the microSD instead. Run a Quick check; " +
+        "if it finds the drive is fine, clear the warning to use the SSD again."), b);
+    }
+    info.replaceChildren(...kids);
+  }
+  // the job
+  const j = ssd.job || {}, box = $("#ssdJob"), running = ssd.running;
+  if (j.kind) {
+    const when = j.finished ? new Date(j.finished * 1000).toLocaleString([], {weekday: "short",
+      hour: "numeric", minute: "2-digit"}) : "";
+    const head = running ? `${JOBNAME[j.kind]}: ${j.step || "working…"}`
+      : `${JOBNAME[j.kind]} ${j.state === "done" ? "finished" : j.state}` + (when ? ` · ${when}` : "");
+    const cls = running ? "banner info" : j.state === "refused" || j.state === "failed" ||
+      j.verdict === "bad" ? "banner bad" : j.verdict === "warn" ? "banner warn" : "banner info";
+    const kids = [el("div", {class: cls, style: "margin-bottom:6px"}, el("b", {}, head),
+      j.summary && !running ? el("div", {}, j.summary) : null)];
+    if (running) {
+      kids.push(el("div", {class: "prog"}, el("i", {style: `width:${Math.round((j.progress || 0) * 100)}%`})));
+      const c = el("button", {class: "btn small"}, "Stop");
+      c.addEventListener("click", () => api("/api/ssd", {action: "cancel"}).then(loadSSD));
+      kids.push(c);
+    }
+    for (const r of j.results || []) {
+      kids.push(el("div", {class: "res"}, el("span", {class: "ic " + r.level}, ICON[r.level] || "•"),
+        el("b", {}, r.title), r.detail ? el("span", {class: "d"}, r.detail) : null,
+        r.lines && r.lines.length ? el("details", {}, el("summary", {}, "Details"),
+          el("pre", {}, r.lines.join("\n"))) : null));
+    }
+    box.replaceChildren(...kids);
+  } else box.replaceChildren();
+  const busy = running || !d.found || !["idle", "error", "starting"].includes(ssd.booth_state);
+  for (const id of ["ssdCheck", "ssdScan", "ssdSmart", "ssdRepair"]) $("#" + id).disabled = busy;
+  $("#ssdFormat").disabled = busy || $("#fmtWord").value.trim().toUpperCase() !== "FORMAT";
+  // what a reformat erases
+  const w = [];
+  if (d.found) {
+    w.push(`Erases the whole ${d.size_text} drive` + (d.partitions.length > 1
+      ? `, including its other ${d.partitions.length - 1} partition(s): ` +
+        d.partitions.filter(p => p.name !== d.device).map(p =>
+          `${p.label || p.fstype || "unnamed"} (${fmtBytes(p.size)})`).join(", ") : "") + ".");
+    if (d.other_files && d.other_files.length) w.push("Also erases these non-booth files: " +
+      d.other_files.join(", ") + ".");
+    if (d.ssd_only) w.push(`${d.ssd_only} video(s) are only on the SSD: they're copied to the ` +
+      "microSD first (if there's room).");
+    else if (d.ssd_only === 0) w.push("Every video on the SSD is already on the microSD too.");
+  }
+  $("#fmtWhat").replaceChildren(...w.map(t => el("div", {}, t)));
+  $("#fmtWhat").classList.toggle("hide", !w.length);
+  clearTimeout(loadSSD.t);
+  if (tab === "ssd") loadSSD.t = setTimeout(loadSSD, running ? 1500 : 8000);
+}
+function fmtBytes(n) {
+  return n >= 1e9 ? (n / 1e9).toFixed(n >= 1e11 ? 0 : 1) + " GB" : Math.round(n / 1e6) + " MB";
+}
+async function ssdStart(action, extra = {}) {
+  const r = await api("/api/ssd", {action, ...extra}).catch(e => ({error: e.message}));
+  if (r.ok) toast(JOBNAME[action] + " started"); else toast(r.error || "Couldn't start", true);
+  loadSSD();
+}
+$("#ssdCheck").addEventListener("click", () => ssdStart("check"));
+$("#ssdScan").addEventListener("click", () => {
+  if (confirm("Read the whole SSD? This takes a while (about 1 minute per 15–20 GB) and stops " +
+              "whenever someone records. You can stop it any time.")) ssdStart("scan");
+});
+$("#ssdSmart").addEventListener("click", () => ssdStart("smart"));
+$("#ssdRepair").addEventListener("click", () => {
+  if (confirm("Repair the SSD's filesystem? It goes offline for a minute or two; recordings " +
+              "go to the microSD meanwhile.")) ssdStart("repair");
+});
+$("#fmtWord").addEventListener("input", () => {
+  $("#ssdFormat").disabled = $("#fmtWord").value.trim().toUpperCase() !== "FORMAT" ||
+    !(ssd && ssd.drive.found) || (ssd && ssd.running);
+});
+$("#ssdFormat").addEventListener("click", () => {
+  if (!confirm("Reformat the SSD now?\n\n" + $("#fmtWhat").innerText +
+               "\n\nThe booth copies the videos back onto it afterwards.")) return;
+  ssdStart("format", {confirm: "FORMAT"});
+  $("#fmtWord").value = ""; $("#ssdFormat").disabled = true;
+});
 
 // --------------------------------------------------------------- settings
 const LABELS = {max: "Best available (auto)", when_full: "When nearly full",
