@@ -36,6 +36,9 @@ DEFAULTS = {
     # Extra camera controls applied with v4l2-ctl at start, e.g.
     # {power_line_frequency = 1} (1 = 50 Hz, 2 = 60 Hz) to stop flicker.
     "v4l2_controls": {},
+    # Stop the webcam lowering its frame rate in dim light (smooth video; the
+    # picture can be a little darker/noisier instead).
+    "steady_framerate": True,
     # Decode the preview at 1/2 or 1/4 size (much less CPU on a Pi 3B+).
     # Recordings are not affected. "auto", 0, 1 or 2.
     "preview_lowres": "auto",

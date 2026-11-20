@@ -59,6 +59,17 @@ class Camera:
         return self._proc is not None and self._proc.poll() is None and \
             self.latest_jpeg is not None and time.monotonic() - self._last_jpeg < 3.0
 
+    def _controls(self):
+        """Saved camera settings, plus: keep the full frame rate in dim light (many
+        webcams halve it to expose longer, which makes recordings look jerky)."""
+        controls = dict(self.cfg["v4l2_controls"])
+        if self.cfg.get("steady_framerate", True) and self.device and self.device != "test":
+            have = {c["name"] for c in devices.list_controls(self.device)}
+            for name in ("exposure_dynamic_framerate", "exposure_auto_priority"):
+                if name in have and name not in controls:
+                    controls[name] = 0
+        return controls
+
     def add_sink(self, fn):
         with self._lock:
             self._sinks = self._sinks + [fn]
@@ -104,7 +115,7 @@ class Camera:
                     self._stop.wait(2)
                     continue
                 self.device = found
-            devices.apply_camera_controls(self.device, self.cfg["v4l2_controls"])
+            devices.apply_camera_controls(self.device, self._controls())
             started = time.monotonic()
             self._run_once()
             if self._stop.is_set():
@@ -166,11 +177,12 @@ class Camera:
             data = stream.read(length)
             if len(data) < length:
                 return
-            self._last_jpeg = time.monotonic()
+            now = time.monotonic()           # when this frame arrived from the camera
+            self._last_jpeg = now
             self.latest_jpeg = data
             for sink in self._sinks:
                 try:
-                    sink(data)
+                    sink(data, now)
                 except Exception:  # never let a sink kill the camera
                     log.exception("frame sink failed")
 

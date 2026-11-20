@@ -23,11 +23,14 @@ FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 # How much faster than real time the test encode must run. Software encoding
 # (Pi 5: no H.264 hardware) shares the processor with the camera preview and
 # the screen, so it needs more headroom than the Pi 3/4 hardware encoder.
-MIN_SPEED = {"hw": 1.3, "sw": 1.6}
+# Headroom needed in the speed test. Software encoding shares the Pi's processor
+# with the camera, the preview and the screen, so it needs plenty.
+MIN_SPEED = {"hw": 1.3, "sw": 2.0}
 
 # x264 speed settings, best quality (smallest files) first. The booth uses the
 # best one this Pi keeps up with at the camera's resolution.
 X264_PRESETS = ("veryfast", "superfast", "ultrafast")
+TEST_VERSION = 2       # bump when the recording pipeline changes: re-test everything
 
 
 def available_encoders():
@@ -92,7 +95,8 @@ def encoder_args(cfg, encoder, w, h, fps):
     gop = str(int(round(fps)) * 2)
     if encoder == "h264_v4l2m2m":
         return ["-c:v", "h264_v4l2m2m", "-b:v", bitrate(cfg, w, h, fps), "-g", gop] + COLOUR_TAGS
-    preset = encoder.split(":", 1)[1] if ":" in encoder else "veryfast"
+    # plain "libx264" (saved by older versions) was always the fastest setting
+    preset = encoder.split(":", 1)[1] if ":" in encoder else "ultrafast"
     # H.264 High profile, level 4.1: plays on every Mac and iPhone, and in every
     # editor. CRF = steady quality; maxrate caps the file size on busy scenes.
     level = h264_level(w, h, fps)
@@ -209,7 +213,8 @@ def choose(cfg, dev, workdir, progress=None):
     if not encoders:
         raise RuntimeError("ffmpeg has no H.264 encoder (h264_v4l2m2m or libx264)")
 
-    key = hashlib.sha1(json.dumps([devices.camera_name(dev), cands, encoders, cfg["timestamp"],
+    key = hashlib.sha1(json.dumps([TEST_VERSION, devices.camera_name(dev), cands, encoders,
+                                   cfg["timestamp"],
                                    cfg["timestamp_size"], str(cfg["video_bitrate"]),
                                    cfg["audio_bitrate"], cfg["orientation"],
                                    cfg["picture_rotation"]], sort_keys=True).encode()).hexdigest()
@@ -277,17 +282,44 @@ def choose(cfg, dev, workdir, progress=None):
     return choice
 
 
+def slow_down(workdir, mode):
+    """A recording dropped frames (the encoder couldn't keep up for real): use the
+    next faster x264 setting from now on. -> the new mode, or None if none faster."""
+    enc = mode.get("encoder", "")
+    if not enc.startswith("libx264"):
+        return None
+    preset = enc.split(":", 1)[1] if ":" in enc else "ultrafast"
+    i = X264_PRESETS.index(preset) if preset in X264_PRESETS else len(X264_PRESETS) - 1
+    if i + 1 >= len(X264_PRESETS):
+        return None
+    new = dict(mode, encoder=f"libx264:{X264_PRESETS[i + 1]}")
+    path = os.path.join(workdir, "video-check.json")
+    try:
+        with open(path) as f:
+            cache = json.load(f)
+        cache["choice"] = new
+        cache["slowed_down"] = time.ctime()
+        media.write_atomic(path, json.dumps(cache, indent=1))
+    except (OSError, ValueError):
+        pass
+    log.warning("recording couldn't keep up: switching to %s", describe_encoder(new["encoder"]))
+    return new
+
+
 def benchmark(cfg, mode, encoder, workdir, seconds=4.0):
     """Encodes `seconds` of camera-like frames with the real recording pipeline.
     Returns (ok, speed, why)."""
     w, h, fps = mode["w"], mode["h"], mode["fps"]
-    src = os.path.join(workdir, f"bench-{w}x{h}.mjpeg")
+    src = os.path.join(workdir, f"bench-{w}x{h}-grainy.mjpeg")
     part = os.path.join(workdir, "bench.ts")
     mp4 = os.path.join(workdir, "bench.mp4")
     try:
         if not os.path.exists(src):
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
-                            f"testsrc2=size={w}x{h}:rate={fps}", "-t", str(seconds),
+                            # grain like a real webcam picture (a clean test pattern
+                            # encodes much faster than a real face in a dim booth)
+                            f"testsrc2=size={w}x{h}:rate={fps},noise=alls=12:allf=t+u",
+                            "-t", str(seconds),
                             "-c:v", "mjpeg", "-q:v", "3", "-f", "mjpeg", src],
                            check=True, capture_output=True, timeout=120)
         cmd = (["ffmpeg", "-v", "error", "-nostdin", "-y", "-framerate", str(fps), "-f", "mjpeg",

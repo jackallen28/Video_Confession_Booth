@@ -141,7 +141,7 @@ def test_apple_friendly_encoding():
 def test_choice_keeps_up_and_tests_little():
     """Pi 5 style (software only): best quality that keeps up; skip hopeless sizes."""
     speeds = {(1920, "ultrafast"): 1.2,                       # 1080p: too slow even at fastest
-              (1280, "ultrafast"): 3.0, (1280, "veryfast"): 1.4, (1280, "superfast"): 1.9}
+              (1280, "ultrafast"): 3.0, (1280, "veryfast"): 1.8, (1280, "superfast"): 2.3}
     tried = []
 
     def fake_bench(cfg, m, enc, workdir, seconds=4.0):

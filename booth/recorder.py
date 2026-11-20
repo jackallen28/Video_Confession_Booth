@@ -10,8 +10,11 @@ While recording, files are MPEG-TS (name.ts.part): they survive a power cut
 and need no header up front. When the recording stops each copy is turned into
 a normal .mp4 (no re-encoding) by storage.finalize().
 
-Both inputs are timestamped with the wall clock (-copyts), so sound and
-picture stay in sync even when the webcam lowers its frame rate in dim light.
+Each camera frame is stamped with the moment it arrived and handed to ffmpeg
+in Matroska, which keeps that time (raw JPEG input doesn't: frames got equal or
+made-up times and the video juddered). The sound is stamped with the wall clock
+(-copyts), so sound and picture stay in sync even when the webcam lowers its
+frame rate in dim light.
 """
 
 import logging
@@ -22,7 +25,7 @@ import subprocess
 import threading
 import time
 
-from . import video
+from . import mkv, video
 
 log = logging.getLogger("booth.recorder")
 
@@ -50,6 +53,9 @@ class Recorder:
         """parts: {"ssd": ".../x.ts.part", "sd": "..."} (at least one)."""
         self.name, self.parts = name, dict(parts)
         self.started = time.time()
+        self._mono0 = time.monotonic()
+        self._mkv = mkv.Writer(*(self.mode["w"], self.mode["h"]))
+        self._last_ms = None
         cmd = self._command(mic)
         log.info("recording %s -> %s", name, ", ".join(self.parts.values()))
         log.debug("cmd: %s", " ".join(cmd))
@@ -70,11 +76,11 @@ class Recorder:
         t0 = self.started
         # -copyts keeps the wall-clock timestamps of both inputs (so they line
         # up); -itsoffset moves them back so the file starts near zero.
+        # video times are seconds since t0 already (from the frames themselves)
         cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning", "-copyts",
-               "-itsoffset", f"{float(cfg['av_offset']) - t0:.3f}",
-               "-thread_queue_size", "512", "-use_wallclock_as_timestamps", "1",
-               "-framerate", f"{m['fps']:g}", "-probesize", "5000000", "-analyzeduration", "0",
-               "-f", "mjpeg", "-i", "pipe:0"]
+               "-itsoffset", f"{float(cfg['av_offset']):.3f}",
+               "-thread_queue_size", "512", "-probesize", "32", "-analyzeduration", "0",
+               "-f", "matroska", "-i", "pipe:0"]
         if mic:
             cmd += ["-itsoffset", f"{-t0:.3f}"]
         if mic == "test":
@@ -105,20 +111,36 @@ class Recorder:
         return 0.0 if self.action_at is None else time.monotonic() - self.action_at
 
     # ------------------------------------------------------------------
-    def _on_frame(self, jpeg):
+    def _on_frame(self, jpeg, arrived=None):
         try:
-            self._q.put_nowait(jpeg)
+            self._q.put_nowait((jpeg, time.monotonic() if arrived is None else arrived))
         except queue.Full:
             self.dropped += 1
+
+    def _frame_ms(self, arrived):
+        """Arrival time -> ms in the video. Frames that came in a burst (the Pi was
+        busy for a moment) are spread out a little so none land on the same frame
+        slot; never more than 0.1 s from when they really arrived."""
+        raw = int(round((arrived - self._mono0) * 1000))
+        ms = raw
+        if self._last_ms is not None:
+            gap = max(1, int(600 / float(self.mode["fps"])))       # 60% of a frame
+            ms = max(raw, self._last_ms + gap)
+            if ms - raw > 100:                                     # don't drift from reality
+                ms = raw
+            ms = max(ms, self._last_ms + 1)
+        self._last_ms = ms
+        return ms
 
     def _write_loop(self):
         pipe = self.proc.stdin
         try:
             while True:
-                jpeg = self._q.get()
-                if jpeg is None:
+                item = self._q.get()
+                if item is None:
                     break
-                pipe.write(jpeg)
+                jpeg, arrived = item
+                pipe.write(self._mkv.frame(jpeg, self._frame_ms(arrived)))
                 self.frames += 1
         except (BrokenPipeError, OSError) as e:
             self.error = self.error or f"recorder pipe: {e}"
@@ -153,12 +175,16 @@ class Recorder:
     def stop(self):
         """Blocks until ffmpeg has written and closed the files. Returns a dict."""
         duration = self.elapsed()
+        took = time.monotonic() - self._mono0
+        fps_in = (self.frames + self.dropped) / took if took > 0 else 0.0
         self._finish_process()
-        log.info("recording %s stopped: %.1fs, %d frames, %d dropped, exit %s",
-                 self.name, duration, self.frames, self.dropped, self.proc.returncode)
+        log.info("recording %s stopped: %.1fs, %d frames (%.1f fps from the camera), "
+                 "%d dropped, exit %s", self.name, duration, self.frames, fps_in,
+                 self.dropped, self.proc.returncode)
         return {"name": self.name, "parts": self.parts, "duration": duration,
                 "started": self.started,
-                "frames": self.frames, "dropped": self.dropped,
+                "frames": self.frames, "dropped": self.dropped, "fps_in": round(fps_in, 1),
+                "seconds": round(took, 1),
                 "exit": self.proc.returncode, "error": self.error,
                 "ffmpeg_log": self.ffmpeg_log()}
 

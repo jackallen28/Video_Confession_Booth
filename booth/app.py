@@ -332,6 +332,16 @@ class App:
             result = rec.stop()
             if result["error"] or result["frames"] == 0:
                 log.error("recorder problem: %s\n%s", result["error"], result["ffmpeg_log"])
+            elif result["dropped"] > max(3, result["frames"] // 100) or (
+                    result["seconds"] >= 8 and self.mode
+                    and result["fps_in"] < 0.85 * float(self.mode["fps"])):
+                # The Pi fell behind (frames dropped, or the camera's frames not read in
+                # time because the processor is busy encoding): from the next clip on,
+                # record with a faster setting. (A camera slowing down in dim light
+                # looks the same; a faster setting is harmless then, files just get bigger.)
+                new = video.slow_down(self.log_dir, self.mode or {})
+                if new:
+                    self.mode = new
             ok = self.storage.finalize(result)
         except Exception:
             log.exception("finishing recording failed")

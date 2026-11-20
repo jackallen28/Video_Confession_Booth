@@ -392,6 +392,7 @@ Tests:
 ```bash
 python3 tests/test_storage.py      # MP4 + names, verification, SSD unplugged then back, corruption repair, crash recovery, delete
 python3 tests/test_devices.py      # reading the webcam's modes and controls, resolution choice
+python3 tests/test_recorder.py     # smooth, right-length video at any camera frame rate; sound in step
 python3 tests/test_touch.py        # the touch screen: tap, two fingers, hold + tap again to delete
 python3 tests/test_display.py      # fitting the screen; restart for a new screen, never mid-recording
 python3 tests/test_update.py       # software update via hotspot, Wi-Fi restored, rollback, saving on stop
