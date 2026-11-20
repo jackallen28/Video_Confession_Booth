@@ -20,7 +20,10 @@ booth restarts). The button's light is only used with the physical button.
   - *Physical button:* a reality-TV style screen saying **"Press button to begin recording"** with
     a bouncing arrow pointing up at the real button. Choose the style on the web page (Screen →
     *Waiting screen*): **Confessional** (glowing pink bokeh, the default), **Neon sign**,
-    **Spotlight**, **Drama** (spinning sunburst), or a little **hand** pressing an arcade button.
+    **Spotlight**, **Drama** (spinning sunburst), a little **hand** pressing an arcade button, or
+    **Fess Up!**: a paper star and the words stuck on one by one, scrapbook style, then
+    "Go on, press the button" pulses softly for 10 s and it starts again. (Fess Up! uses its own
+    artwork, so the "Words on screen" waiting-screen lines don't change it.)
     The words can be changed too. The arrow's position across the screen is Screen → *Arrow to
     the button* (0.86 matches the enclosure drawing). The button's light fades fully on and off.
   - *Touch screen:* the live camera (mirrored like a mirror) with a see-through red button and
@@ -413,6 +416,7 @@ Tests:
 python3 tests/test_storage.py      # MP4 + names, verification, SSD unplugged then back, corruption repair, crash recovery, delete
 python3 tests/test_devices.py      # reading the webcam's modes and controls, resolution choice
 sudo python3 tests/test_ssd.py     # SSD tab: check, refuse without room, reformat (on a fake disk)
+python3 tests/test_themes.py       # every waiting screen draws, landscape and portrait
 python3 tests/test_recorder.py     # smooth, right-length video at any camera frame rate; sound in step
 python3 tests/test_touch.py        # the touch screen: tap, two fingers, hold + tap again to delete
 python3 tests/test_display.py      # fitting the screen; restart for a new screen, never mid-recording

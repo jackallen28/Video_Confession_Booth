@@ -6,8 +6,10 @@ in reality-TV styles. Chosen on the web page: Screen -> Waiting screen.
     spotlight     sweeping gold stage spotlights and sparkles
     drama         spinning hot-pink sunburst title card
     hand          the little hand pressing a glowing arcade button
+    fessup        "FESS UP!": a paper star and the words stuck on, scrapbook style,
+                  "Go on, press the button" pulsing; replays every ~13 s
 
-Everything is drawn by the booth itself (no image files), sized for the
+Everything except fessup (artwork in assets/fessup) is drawn by the booth itself, sized for the
 screen, with the slow parts drawn once at start so a Pi 3B+ stays smooth.
 Fonts come from Debian packages installed by install.sh (Lobster, Bebas Neue,
 Montserrat); without them it falls back to the default font.
@@ -21,7 +23,8 @@ import random
 import pygame
 import pygame.gfxdraw
 
-THEMES = ["confessional", "neon", "spotlight", "drama", "hand"]
+THEMES = ["confessional", "neon", "spotlight", "drama", "hand", "fessup"]
+ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 FONT_FILES = {
     "script": ["lobster.otf", "Lobster*.ttf", "Lobster*.otf"],
@@ -130,6 +133,20 @@ def vignette(size, strength=200):
     return pygame.transform.smoothscale(small, (w, h))
 
 
+def _ease_out_back(p, s=1.9):
+    """0 -> 1 with a little overshoot at the end (lands, squashes, settles)."""
+    p -= 1
+    return 1 + (s + 1) * p ** 3 + s * p ** 2
+
+
+def _shadow(sprite, alpha):
+    """Same shape, dark and see-through: the paper's shadow while it's lifted."""
+    sh = sprite.copy()
+    sh.fill((25, 0, 4, 255), special_flags=pygame.BLEND_RGBA_MIN)   # dark, same outline
+    sh.set_alpha(alpha)
+    return sh
+
+
 class WaitingScreen:
     def __init__(self, screen, cfg):
         self.screen = screen
@@ -154,7 +171,7 @@ class WaitingScreen:
                 self.cfg.get("waiting_subtitle") or "to begin recording")
 
     ARROW_GLOW = {"confessional": (255, 60, 200), "neon": (30, 200, 255),
-                  "spotlight": (255, 170, 40), "drama": (60, 0, 60)}
+                  "spotlight": (255, 170, 40), "drama": (60, 0, 60), "fessup": (90, 0, 12)}
 
     def _arrow_sprite(self, glow_colour):
         """A chunky rounded arrow with a soft glow, drawn once (big, then shrunk
@@ -349,6 +366,98 @@ class WaitingScreen:
         bounce = abs(math.sin(t * 2.2)) * S * 0.015
         self._centre_text(self.d1, H * 0.42 - bounce)
         self._centre_text(self.d2, H * 0.64 - bounce)
+
+    # ----------------------------------------------------------- 6. fess up
+    # The artwork is 1024x600 (this booth's screen). Timeline, in seconds:
+    #   0.15-0.85 the star is stuck on; 0.9-1.45 "FESS UP!"; 1.5-2.0 the small line;
+    #   then the small line pulses softly for 10 s; 0.5 s fade; again.
+    FESS_RED = (170, 18, 33)
+    FESS_STEPS = 12                     # stop-motion frames per second while sticking on
+    # (layer, starts at, takes, tilt it starts at, size it starts at)
+    FESS = [("star", 0.15, 0.70, -28.0, 0.45), ("title", 0.90, 0.55, 9.0, 1.35),
+            ("sub", 1.50, 0.50, -7.0, 1.35)]
+    FESS_HOLD, FESS_FADE = 10.0, 0.5
+
+    def _build_fessup(self):
+        W, H = self.W, self.H
+        folder = os.path.join(ASSETS, "fessup")
+        art = {k: pygame.image.load(os.path.join(folder, k + ".png")).convert_alpha()
+               for k in ("star", "title", "sub")}
+        if H > W:                     # portrait screen: turn the star to fit it the same way
+            art["star"] = pygame.transform.rotate(art["star"], -90)
+        sw, sh = art["star"].get_size()
+        cover = max(W / sw, H / sh)                      # the star fills the screen
+        # the words as big as on a landscape screen of the same size (and always fitting)
+        fit_ = min(max(W, H) / 1024, W * 0.88 / art["title"].get_width())
+        place = {"star": (cover, (W / 2, H / 2)),
+                 "title": (fit_, (W / 2 + 3.5 * fit_, H / 2 - 27 * fit_)),
+                 "sub": (fit_, (W / 2 + 3.5 * fit_, H / 2 + 62.5 * fit_))}
+        rng = random.Random(3)
+        self.fess = {}
+        for name, start, dur, tilt, zoom0 in self.FESS:
+            scale, centre = place[name]
+            img = pygame.transform.smoothscale(
+                art[name], (max(1, round(art[name].get_width() * scale)),
+                            max(1, round(art[name].get_height() * scale))))
+            frames = []
+            n = max(2, round(dur * self.FESS_STEPS))
+            for i in range(n):
+                p = (i + 1) / n
+                e = _ease_out_back(p)
+                last = i == n - 1
+                # tilted, a different size and casting a shadow -> pressed down flat
+                zoom = 1.0 if last else zoom0 + (1 - zoom0) * e
+                angle = 0.0 if last else tilt * (1 - e) + rng.uniform(-1.2, 1.2)
+                jx, jy = (0, 0) if last else (rng.uniform(-2, 2), rng.uniform(-2, 2))
+                spr = img if last else pygame.transform.rotozoom(img, angle, zoom)
+                shadow = None if last else _shadow(spr, 70 if name == "star" else 55)
+                off = self.S * 0.035 * (1 - min(1.0, e))
+                frames.append((spr, shadow, off, (centre[0] + jx, centre[1] + jy)))
+            self.fess[name] = (start, dur, frames, img, centre)
+        # once everything is stuck on, the still parts are one picture
+        self.fess_base = pygame.Surface((W, H)).convert()
+        self.fess_base.fill(self.FESS_RED)
+        for name in ("star", "title"):
+            _, _, _, img, centre = self.fess[name]
+            self.fess_base.blit(img, img.get_rect(center=(round(centre[0]), round(centre[1]))))
+        self.fess_t0 = None
+        self.fess_last = -1e9
+
+    def _draw_fessup(self, t):
+        if t - self.fess_last > 0.5:            # waiting screen just came back: start over
+            self.fess_t0 = t
+        self.fess_last = t
+        built = self.FESS[-1][1] + self.FESS[-1][2]       # all stuck on
+        cycle = built + self.FESS_HOLD + self.FESS_FADE + 0.15
+        lt = (t - self.fess_t0) % cycle
+        scr = self.screen
+        if lt >= built:
+            # all on: the still picture, and the small line pulsing softly
+            scr.blit(self.fess_base, (0, 0))
+            _, _, _, img, (cx, cy) = self.fess["sub"]
+            k = 1 + 0.045 * (0.5 - 0.5 * math.cos((lt - built) * 2 * math.pi / 1.6))
+            spr = pygame.transform.smoothscale(img, (round(img.get_width() * k),
+                                                     round(img.get_height() * k)))
+            spr.set_alpha(int(255 - 50 * (k - 1) / 0.045))
+            scr.blit(spr, spr.get_rect(center=(round(cx), round(cy))))
+            fade = (lt - built - self.FESS_HOLD) / self.FESS_FADE
+            if fade > 0:                         # off again before the next round
+                veil = pygame.Surface(scr.get_size())
+                veil.fill(self.FESS_RED)
+                veil.set_alpha(int(255 * min(1.0, fade)))
+                scr.blit(veil, (0, 0))
+            return
+        scr.fill(self.FESS_RED)
+        for name, start, dur, _, _ in self.FESS:
+            if lt < start:
+                break
+            _, _, frames, img, centre = self.fess[name]
+            i = min(len(frames) - 1, int((lt - start) * self.FESS_STEPS))
+            spr, shadow, off, (cx, cy) = frames[i]
+            rect = spr.get_rect(center=(round(cx), round(cy)))
+            if shadow is not None:
+                scr.blit(shadow, rect.move(round(off * 0.6), round(off)))
+            scr.blit(spr, rect)                  # paper: solid from the first frame
 
     # ------------------------------------------------------------- 5. hand
     def _build_hand(self):
