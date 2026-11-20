@@ -232,6 +232,10 @@
       <div id="ssdInfo"><p class="muted">Looking…</p></div>
     </div>
     <div class="card">
+      <h2>Videos on the drives</h2>
+      <div id="ssdVideos"><p class="muted">…</p></div>
+    </div>
+    <div class="card">
       <h2>Check</h2>
       <p class="muted" style="margin:0 2px 4px">Checks never change your videos. During a quick
         check the SSD goes offline for a minute; anything recorded meanwhile goes to the microSD
@@ -608,6 +612,7 @@ async function loadSSD() {
     }
     info.replaceChildren(...kids);
   }
+  renderPlacement(ssd.placement, ssd.storage_mode);
   // the job
   const j = ssd.job || {}, box = $("#ssdJob"), running = ssd.running;
   if (j.kind) {
@@ -653,6 +658,47 @@ async function loadSSD() {
   $("#fmtWhat").classList.toggle("hide", !w.length);
   clearTimeout(loadSSD.t);
   if (tab === "ssd") loadSSD.t = setTimeout(loadSSD, running ? 1500 : 8000);
+}
+function renderPlacement(pl, mode) {
+  const vids = pl.videos, n = f => vids.filter(f).length;
+  const has = (v, d) => !!v.on[d];
+  const both = n(v => has(v, "ssd") && has(v, "sd")), ssdOnly = n(v => has(v, "ssd") && !has(v, "sd"));
+  const sdOnly = n(v => !has(v, "ssd") && has(v, "sd"));
+  const ssdUnknown = vids.length && vids.every(v => v.on.ssd === null);
+  const rows = [
+    ["Saved videos", String(vids.length)],
+    ["On the SSD", ssdUnknown ? "SSD not connected" : String(both + ssdOnly)],
+    ["On the microSD", String(both + sdOnly)],
+    ["On both", String(both)],
+    ["Only on the SSD", String(ssdOnly)],
+    ["Only on the microSD", String(sdOnly)]];
+  const kids = rows.map(([k, v]) => el("div", {class: "row"}, el("span", {class: "k"}, k),
+                                       el("span", {class: "v"}, v)));
+  const names = {ssd: "SSD", sd: "microSD"};
+  for (const [d, r] of Object.entries(pl.room || {})) {
+    kids.push(el("div", {class: "row"}, el("span", {class: "k"}, `Room on ${names[d]}`),
+      el("span", {class: "v"}, r.free_text + (r.hours !== null ? ` · about ${r.hours >= 10 ?
+        Math.round(r.hours) : r.hours} hours of video` : ""))));
+  }
+  kids.push(el("p", {class: "muted", style: "margin:8px 2px 0"},
+    (pl.mb_per_minute ? `Your videos use about ${pl.mb_per_minute} MB per minute. ` : "") +
+    (mode === "both" ? "Saving mode: every video on both drives; when one is full, the other carries on."
+                     : "Saving mode: SSD first, the microSD only when the SSD is full or has a problem. " +
+                       "Change it under Camera → Recording (\"Both drives\" keeps a backup copy).")));
+  if (sdOnly && !ssdUnknown && mode !== "both") kids.push(el("p", {class: "muted", style: "margin:6px 2px 0"},
+    `${sdOnly} video(s) are only on the microSD (recorded while the SSD was full, unplugged or had a ` +
+    "warning). The booth copies them onto the SSD in the background when it can."));
+  const list = el("div", {});
+  for (const v of vids) {
+    const mark = d => v.on[d] === "verified" ? el("span", {class: "chip safe"}, names[d] + " ✓")
+      : v.on[d] === "checking" ? el("span", {class: "chip"}, names[d] + " …")
+      : v.on[d] === null ? null : el("span", {class: "chip"}, "not on " + names[d]);
+    list.append(el("div", {class: "row"}, el("span", {class: "k"}, nameDate(v.name)),
+                   el("span", {class: "v"}, mark("ssd"), mark("sd"))));
+  }
+  if (vids.length) kids.push(el("details", {style: "margin-top:8px"},
+    el("summary", {style: "color:var(--blue);cursor:pointer"}, "Show every video"), list));
+  $("#ssdVideos").replaceChildren(...kids);
 }
 function fmtBytes(n) {
   return n >= 1e9 ? (n / 1e9).toFixed(n >= 1e11 ? 0 : 1) + " GB" : Math.round(n / 1e6) + " MB";
@@ -841,7 +887,7 @@ function vidRow(v) {
   const u = encodeURIComponent(v.name);
   const where = (v.on || []).map(d => d === "ssd" ? "SSD" : "microSD").join(" + ");
   const chip = v.state === "safe" ? el("span", {class: "chip safe"}, "✓ " + (where || "saved"))
-    : v.state === "one_copy" ? el("span", {class: "chip one"}, "1 drive")
+    : v.state === "one_copy" ? el("span", {class: "chip one"}, (where || "1 drive") + " only")
     : v.state === "damaged" ? el("span", {class: "chip bad"}, "check log")
     : el("span", {class: "chip"}, "checking");
   return el("div", {class: "vid", "data-name": v.name},

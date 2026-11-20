@@ -729,6 +729,40 @@ class Storage:
                 self.ssd.errors.pop(k, None)
         log.warning("SSD warning cleared from the SSD tab")
 
+    def placement(self):
+        """Which drive holds each saved video (guest-deleted ones not counted),
+        and roughly how much more recording time fits on each drive."""
+        rows, total_bytes, total_secs = [], 0, 0.0
+        for name in self.manifest.names():
+            e = self.manifest.entry(name) or {}
+            row = {"name": name, "on": {}}
+            for d in self.drives:
+                if not d.present:
+                    row["on"][d.name] = None             # can't tell: drive not connected
+                    continue
+                try:
+                    size = os.path.getsize(d.path(name))
+                except OSError:
+                    row["on"][d.name] = False
+                    continue
+                c = e.get("copies", {}).get(d.name, {})
+                row["on"][d.name] = "verified" if c.get("status") == "verified" else "checking"
+                row["size"] = size
+                secs = c.get("duration") or 0
+                if secs > 1:
+                    total_bytes += size
+                    total_secs += secs
+            rows.append(row)
+        rate = total_bytes / total_secs if total_secs > 30 else None      # bytes per second
+        room = {}
+        for d in self.drives:
+            if d.present and d.free is not None:
+                usable = max(0, d.free - self.min_free)
+                room[d.name] = {"free": usable, "free_text": media.human_bytes(usable),
+                                "hours": round(usable / rate / 3600, 1) if rate else None}
+        return {"videos": rows, "mb_per_minute": round(rate * 60 / 1e6, 1) if rate else None,
+                "room": room}
+
     # ------------------------------------------------------------ maintenance
     def ssd_only(self):
         """Every video file in the SSD's video folder (kept, guest-deleted or

@@ -290,6 +290,20 @@ def test_smart_check_is_not_an_ssd_error():
             assert "io" not in st.ssd.errors
 
 
+def test_placement_and_room_left():
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg, st = setup(tmp, mode="ssd_first")
+        a, b = st.new_name(), "2026-01-01_00-00-01.mp4"
+        record(st, a, [st.ssd])
+        record(st, b, [st.sd])
+        run_queue(st)
+        pl = st.placement()
+        on = {v["name"]: v["on"] for v in pl["videos"]}
+        assert on[a]["ssd"] == "verified" and on[a]["sd"] in (False, "verified"), on
+        assert on[b]["sd"] == "verified", on
+        assert pl["mb_per_minute"] is None, "too little video to estimate yet"
+        assert set(pl["room"]) == {"ssd", "sd"} and pl["room"]["sd"]["free"] > 0
+
 if __name__ == "__main__":
     for fn in [v for k, v in sorted(globals().items()) if k.startswith("test_")]:
         t = time.monotonic()

@@ -143,6 +143,7 @@ def checks():
         # SSD tab: drive info; format needs FORMAT typed; test mode never touches disks
         s = json.loads(get("/api/ssd")[2])
         assert s["drive"]["found"] is False and s["drive"]["test_mode"] and not s["running"], s
+        assert "videos" in s["placement"] and s["storage_mode"] in ("ssd_first", "both"), s
         assert "FORMAT" in post("/api/ssd", {"action": "format"})["error"]
         r = post("/api/ssd", {"action": "format", "confirm": "FORMAT"})
         assert not r["ok"] and "only run on the Pi" in r["error"], r
