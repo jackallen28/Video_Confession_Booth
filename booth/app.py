@@ -72,7 +72,7 @@ class App:
         self.ui = UI(self.screen, cfg)
         self.waiting = themes.WaitingScreen(self.screen, cfg)
         # snippets of each recording, played behind the saving bar
-        self.highlights = Highlights(cfg["preview_fps"])
+        self.highlights = Highlights(devices.preview_fps(cfg))
         self._hl_seq = None
         self.button = Button(cfg)
         # the light lives in the physical button, so only drive it when that's in use

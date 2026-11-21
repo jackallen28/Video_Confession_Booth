@@ -29,6 +29,11 @@ def low_priority():
     return pre
 
 
+def nice(n):
+    """Command prefix that runs a program at lower CPU priority (n: 1-19)."""
+    return ["nice", "-n", str(n)] if shutil.which("nice") else []
+
+
 def drop_cache(path):
     """Forget the cached copy of a file so the next read really comes from the drive."""
     try:

@@ -89,7 +89,12 @@ class Camera:
         else:
             if self.lowres and fmt == "mjpeg":
                 cmd += ["-lowres", str(self.lowres)]
-            cmd += ["-f", "v4l2", "-thread_queue_size", "64",
+            # Low delay for the mirror on screen: decode one frame at a time (frame
+            # threads would hold back a few frames), and keep only a short queue, so
+            # if the Pi is busy for a moment it skips frames instead of falling
+            # seconds behind.
+            cmd += ["-threads", "1", "-fflags", "nobuffer", "-flags", "low_delay",
+                    "-f", "v4l2", "-thread_queue_size", "8",
                     "-input_format", fmt, "-video_size", f"{w}x{h}",
                     "-framerate", f"{fps:g}", "-i", self.device]
             out_a = ["-c:v", "copy"] if fmt == "mjpeg" else ["-c:v", "mjpeg", "-q:v", "4"]
@@ -98,7 +103,7 @@ class Camera:
         # camera on its side is turned after shrinking, which costs very little.
         turn = [f for f in video.orient_filters(cfg) if f.startswith("transpose")]
         pw, ph = (self.ph, self.pw) if turn else (self.pw, self.ph)
-        vf = [f"fps={cfg['preview_fps']}",
+        vf = [f"fps={devices.preview_fps(cfg):g}",
               f"scale={pw}:{ph}:force_original_aspect_ratio=increase:flags=fast_bilinear",
               f"crop={pw}:{ph}"] + turn
         if cfg["mirror_preview"]:

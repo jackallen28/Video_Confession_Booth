@@ -42,7 +42,9 @@ DEFAULTS = {
     # Decode the preview at 1/2 or 1/4 size (much less CPU on a Pi 3B+).
     # Recordings are not affected. "auto", 0, 1 or 2.
     "preview_lowres": "auto",
-    "preview_fps": 15,
+    # Live picture on the booth screen, frames a second: "auto" = 24 on a Pi 4/5
+    # (smoother, feels less delayed), 15 on a Pi 3.
+    "preview_fps": "auto",
     "mirror_preview": True,
     # "landscape" or "portrait" (recordings and the booth screen).
     "orientation": "landscape",

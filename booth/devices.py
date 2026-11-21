@@ -74,6 +74,22 @@ def list_modes(dev):
     return result
 
 
+def pi_model():
+    """'Raspberry Pi 5 Model B Rev 1.0', or '' when not on a Pi."""
+    try:
+        with open("/proc/device-tree/model") as f:
+            return f.read().strip("\x00\n ")
+    except OSError:
+        return ""
+
+
+def preview_fps(cfg):
+    v = cfg.get("preview_fps", "auto")
+    if str(v) != "auto":
+        return float(v)
+    return 15.0 if "Pi 3" in pi_model() else 24.0
+
+
 def list_controls(dev):
     """Camera controls as reported by v4l2-ctl --list-ctrls-menus.
     -> [{"name", "type", "min", "max", "step", "default", "value", "flags", "menu": {n: label}, "group"}]"""

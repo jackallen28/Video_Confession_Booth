@@ -25,7 +25,7 @@ import subprocess
 import threading
 import time
 
-from . import mkv, video
+from . import media, mkv, video
 
 log = logging.getLogger("booth.recorder")
 
@@ -61,7 +61,10 @@ class Recorder:
         log.debug("cmd: %s", " ".join(cmd))
         with open(self._errlog_path, "wb") as errlog:
             try:
-                self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                # The encoder runs at lower priority than the camera and the screen:
+                # it can lag a moment (frames wait in its queue, timed when they
+                # arrived), the live picture shouldn't.
+                self.proc = subprocess.Popen(media.nice(10) + cmd, stdin=subprocess.PIPE,
                                              stdout=subprocess.DEVNULL, stderr=errlog, bufsize=0)
             except OSError as e:
                 self.error = str(e)
