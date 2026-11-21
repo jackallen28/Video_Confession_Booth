@@ -138,7 +138,10 @@ def test_slow_down_steps_to_faster_preset():
         assert video.slow_down(tmp, dict(mode, encoder="libx264:ultrafast")) is None
         assert video.slow_down(tmp, dict(mode, encoder="h264_v4l2m2m")) is None
         # older versions saved plain "libx264": that was the fastest setting
-        assert "ultrafast" in video.encoder_args({}, "libx264", 1920, 1080, 30)
+        args = video.encoder_args({}, "libx264", 1920, 1080, 30)
+        assert "ultrafast" in args
+        # ultrafast's blockiness filter and better compression switched back on
+        assert "deblock=1,0:cabac=1" in args
 
 
 if __name__ == "__main__":

@@ -40,6 +40,12 @@ FIELDS = [
          help="Both: a copy on each at the same time (if one fills up or fails, the other "
               "carries on). 'First': that drive until it's full or fails, then the other. "
               "'Only': never uses the other drive"),
+    dict(key="voice_cleanup", group="Recording", label="Voice clean-up", type="bool",
+         apply="live", help="Cuts low rumble, evens out quiet and loud voices a little, "
+                            "never distorts. Off = the microphone's sound untouched"),
+    dict(key="mains_hz", group="Recording", label="Mains power (stops flicker)", type="select",
+         options=[50, 60], apply="restart",
+         help="50 Hz: Australia, NZ, UK, Europe. 60 Hz: US, Canada"),
     dict(key="max_record_seconds", group="Recording", label="Longest recording (seconds)",
          type="int", min=10, max=1800, apply="live"),
     dict(key="av_offset", group="Recording", label="Sound/picture sync (seconds)", type="float",

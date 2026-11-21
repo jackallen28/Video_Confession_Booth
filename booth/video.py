@@ -30,7 +30,7 @@ MIN_SPEED = {"hw": 1.3, "sw": 2.0}
 # x264 speed settings, best quality (smallest files) first. The booth uses the
 # best one this Pi keeps up with at the camera's resolution.
 X264_PRESETS = ("veryfast", "superfast", "ultrafast")
-TEST_VERSION = 2       # bump when the recording pipeline changes: re-test everything
+TEST_VERSION = 3       # bump when the recording pipeline changes: re-test everything
 
 
 def available_encoders():
@@ -100,7 +100,13 @@ def encoder_args(cfg, encoder, w, h, fps):
     # H.264 High profile, level 4.1: plays on every Mac and iPhone, and in every
     # editor. CRF = steady quality; maxrate caps the file size on busy scenes.
     level = h264_level(w, h, fps)
-    return ["-c:v", "libx264", "-preset", preset, "-crf", "21", "-profile:v", "high",
+    extra = []
+    if preset == "ultrafast":
+        # ultrafast switches off the deblocking filter (blocky faces) and CABAC (bigger
+        # files); both cost almost nothing on a Pi 5, so they go back on
+        extra = ["-x264-params", "deblock=1,0:cabac=1"]
+    return ["-c:v", "libx264", "-preset", preset] + extra + [
+            "-crf", "21", "-profile:v", "high",
             "-level:v", level, "-maxrate", "12M", "-bufsize", "24M", "-g", gop] + COLOUR_TAGS
 
 

@@ -68,6 +68,11 @@ class Camera:
             for name in ("exposure_dynamic_framerate", "exposure_auto_priority"):
                 if name in have and name not in controls:
                     controls[name] = 0
+        if self.device and self.device != "test" and "power_line_frequency" not in controls:
+            hz = int(self.cfg.get("mains_hz") or 0)
+            if hz in (50, 60) and "power_line_frequency" in {
+                    c["name"] for c in devices.list_controls(self.device)}:
+                controls["power_line_frequency"] = 1 if hz == 50 else 2    # no flicker
         return controls
 
     def add_sink(self, fn):

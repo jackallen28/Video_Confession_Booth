@@ -27,6 +27,14 @@ DEFAULTS = {
     "video_encoder": "auto",
     "video_bitrate": "auto",     # e.g. "8M"
     "audio_bitrate": "128k",
+    # Voice clean-up on the recording's sound: cut low rumble (air-con, knocks
+    # on the booth), even out quiet and loud voices a little, never clip.
+    "voice_cleanup": True,
+    "audio_filter": "highpass=f=80,acompressor=threshold=-24dB:ratio=2.5:attack=15:"
+                    "release=250:makeup=4dB,alimiter=limit=0.95",
+    # Mains frequency where the booth is (50 Hz: Australia, UK, Europe; 60 Hz:
+    # US, Canada). Stops webcam flicker/banding under lights.
+    "mains_hz": 50,
 
     # Date/time burnt into the corner of the recordings.
     "timestamp": False,

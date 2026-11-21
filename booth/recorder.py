@@ -97,6 +97,8 @@ class Recorder:
         cmd += ["-vf", video.video_filter(cfg, m["w"], m["h"], self.log_dir, m["fps"])]
         cmd += video.encoder_args(cfg, m["encoder"], m["w"], m["h"], m["fps"])
         if mic:
+            if cfg.get("voice_cleanup", True) and cfg.get("audio_filter"):
+                cmd += ["-af", cfg["audio_filter"]]
             cmd += ["-c:a", "aac", "-b:a", cfg["audio_bitrate"]]
         cmd += ["-metadata", f"title={os.path.splitext(self.name)[0]}"]
         slaves = "|".join(f"[f=mpegts:onfail=ignore]{p}" for p in self.parts.values())
