@@ -28,7 +28,12 @@ class Camera:
         self.log_dir = log_dir
         lowres = cfg["preview_lowres"]
         if lowres == "auto":
-            lowres = 2 if mode["w"] > 1280 else 1 if mode["w"] > 640 else 0
+            # Decode the mirror at the smallest size that is still at least as big as
+            # the screen (sharp, not stretched): 720p on a 1024x600 screen = full size.
+            big, small = max(mode["w"], mode["h"]), min(mode["w"], mode["h"])
+            need_big, need_small = max(preview_size), min(preview_size)
+            lowres = next((n for n in (2, 1)
+                           if big >> n >= need_big and small >> n >= need_small), 0)
         self.lowres = int(lowres)
         self.device = device
         self._proc = None

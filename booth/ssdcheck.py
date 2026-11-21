@@ -279,6 +279,12 @@ class SSDCheck:
         elif speed:
             self._result("ok", "USB 3 connection", f"{speed // 1000} Gb/s via "
                          f"{usb.get('adapter') or 'adapter'} ({usb.get('driver', '?')})")
+        if st.usb_limited:
+            self._result("bad", "USB power is limited to 600 mA",
+                         "The power supply isn't the official 27 W (5 V 5 A) one, so the Pi 5 "
+                         "gives all its USB ports together only 600 mA. A webcam plus an SSD "
+                         "need more: the SSD drops out (\"error -71\" / resets in the messages "
+                         "below). Use the official Raspberry Pi 27 W supply.")
         if st.undervolt:
             self._result("bad", "The Pi's power supply is too weak",
                          "Under-voltage since start-up. Drives drop out and files get damaged: "

@@ -111,6 +111,7 @@ class Web:
             "background_jobs": snap["pending"],
             "damaged": snap["damaged"],
             "undervolt": snap["undervolt"],
+            "hot": snap["hot"], "temp_c": snap["temp_c"], "usb_limited": snap["usb_limited"],
             "videos": len(app.storage.manifest.names()),
             "clock": time.time(),
             "clock_text": datetime.datetime.now().strftime("%a %d %b %Y %H:%M:%S"),

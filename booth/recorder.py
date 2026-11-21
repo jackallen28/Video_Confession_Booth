@@ -44,7 +44,7 @@ class Recorder:
         self.frames = 0
         self.dropped = 0
         self.error = None
-        self._q = queue.Queue(maxsize=60)
+        self._q = queue.Queue(maxsize=300)    # 10 s of frames: plenty of room on 8 GB
         self._writer = None
         self._errlog_path = os.path.join(log_dir, "last-recording-ffmpeg.log")
 

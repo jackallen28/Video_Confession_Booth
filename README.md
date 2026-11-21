@@ -73,6 +73,11 @@ unplugging and replugging one, makes the booth restart itself to fit it (a few s
 until nobody is recording). With no screen connected at power-on it waits for one (the web page
 starts once a screen is there).
 
+**Built for a Raspberry Pi 5 (8 GB).** Fit the official **Active Cooler**: the booth runs the
+processor at full speed while it's on (`cpu_governor`), and without a cooler a Pi 5 in an
+enclosure gets hot and slows down. The web page shows the Pi's temperature and warns if it ever
+had to slow down.
+
 **Power matters.**
 - **Pi 5:** use the **official 27 W (5 V 5 A) USB-C supply**. With a weaker (3 A) supply the Pi 5
   limits all its USB ports together to 600 mA, which isn't enough for a webcam plus an SSD: the

@@ -464,7 +464,9 @@ function render() {
     if (d.problems.length) ban.append(el("div", {class: "banner bad"}, `${label}: ${d.problems.join(", ")}`));
   }
   if (s.damaged) ban.append(el("div", {class: "banner bad"}, `${s.damaged} recording(s) couldn't be verified - see System → Log.`));
-  if (s.undervolt) ban.append(el("div", {class: "banner warn"}, "Power supply too weak (under-voltage). Use the official supply / a powered hub for the SSD."));
+  if (s.undervolt) ban.append(el("div", {class: "banner warn"}, "Power supply too weak (under-voltage). Use the official Raspberry Pi 27 W (5 V 5 A) supply."));
+  if (s.usb_limited) ban.append(el("div", {class: "banner warn"}, "This power supply isn't the official 27 W one, so the Pi 5 limits all its USB ports together to 600 mA. The SSD can drop out. Use the official Raspberry Pi 27 W (5 V 5 A) supply."));
+  if (s.hot) ban.append(el("div", {class: "banner warn"}, `The Pi got too hot and slowed down${s.temp_c ? ` (${s.temp_c}°C now)` : ""}. Fit the Raspberry Pi Active Cooler and let air into the enclosure.`));
 
   // stats
   const cam = s.camera, m = cam.mode;
@@ -480,6 +482,8 @@ function render() {
     drive("SSD", s.drives.ssd), drive("microSD", s.drives.sd),
     stat("Videos", String(s.videos), s.background_jobs ? "Checking " + s.background_jobs + "…" : "All checked"),
     stat("Clock", s.clock_text.replace(/:\d\d$/, ""), ""),
+    stat("Pi", s.temp_c ? s.temp_c + "°C" : "—", s.hot ? "Too hot: slowed down" : s.usb_limited ? "USB power limited" : "OK",
+         s.hot || s.usb_limited ? "warnc" : ""),
   );
   $("#piClock").textContent = s.clock_text;
   $("#phoneClock").textContent = new Date().toLocaleString([], {weekday: "short", day: "2-digit", month: "short",

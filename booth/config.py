@@ -47,12 +47,14 @@ DEFAULTS = {
     # Stop the webcam lowering its frame rate in dim light (smooth video; the
     # picture can be a little darker/noisier instead).
     "steady_framerate": True,
-    # Decode the preview at 1/2 or 1/4 size (much less CPU on a Pi 3B+).
-    # Recordings are not affected. "auto", 0, 1 or 2.
+    # Decode the live picture at 1/2 or 1/4 size. "auto": the smallest that's still
+    # as big as the screen. Recordings are not affected. "auto", 0, 1 or 2.
     "preview_lowres": "auto",
-    # Live picture on the booth screen, frames a second: "auto" = 24 on a Pi 4/5
-    # (smoother, feels less delayed), 15 on a Pi 3.
+    # Live picture on the booth screen, frames a second ("auto" = 30, like the camera).
     "preview_fps": "auto",
+    # Pi 5: run the processor at full speed all the time while the booth runs
+    # (steady encoding, no delay ramping up). Needs the Active Cooler. "" = leave it.
+    "cpu_governor": "performance",
     "mirror_preview": True,
     # "landscape" or "portrait" (recordings and the booth screen).
     "orientation": "landscape",

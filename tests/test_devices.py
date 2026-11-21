@@ -163,6 +163,20 @@ def test_choice_keeps_up_and_tests_little():
         assert (c["w"], c["encoder"]) == (1920, "libx264:ultrafast"), c
 
 
+def test_pi5_live_picture():
+    """Sharp (not stretched) and at the camera's own 30 fps."""
+    from booth import camera
+    cfg = config.load(overrides={"settings_file": "/nonexistent"})
+    assert devices.preview_fps(cfg) == 30.0
+    for (w, h), size, lowres in (((1280, 720), (1024, 600), 0), ((1920, 1080), (1024, 600), 0),
+                                 ((3840, 2160), (1024, 600), 1), ((1280, 720), (600, 1024), 0),
+                                 ((1920, 1080), (480, 320), 1)):
+        cam = camera.Camera(cfg, "test", {"format": "mjpeg", "w": w, "h": h, "fps": 30.0},
+                            size, tempfile.gettempdir())
+        assert cam.lowres == lowres, ((w, h), size, cam.lowres)
+        assert (w >> cam.lowres) >= min(max(size), w), "decoded smaller than the screen"
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):

@@ -84,10 +84,10 @@ def pi_model():
 
 
 def preview_fps(cfg):
+    """Live picture rate: "auto" = 30, the camera's own rate (smoothest; a Pi 5
+    has room for it)."""
     v = cfg.get("preview_fps", "auto")
-    if str(v) != "auto":
-        return float(v)
-    return 15.0 if "Pi 3" in pi_model() else 24.0
+    return 30.0 if str(v) == "auto" else float(v)
 
 
 def list_controls(dev):

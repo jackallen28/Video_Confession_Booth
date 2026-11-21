@@ -191,6 +191,21 @@ def disk_sysfs(device):
     return p if os.path.isdir(p) else None
 
 
+def usb_current_limited():
+    """Pi 5: True when the power supply didn't say it can give 5 A and USB
+    current hasn't been raised in config.txt, so all the USB ports together get
+    only 600 mA (a webcam plus an SSD need more)."""
+    try:
+        with open("/proc/device-tree/chosen/power/max_current", "rb") as f:
+            ma = int.from_bytes(f.read()[:4], "big")
+    except OSError:
+        return False                       # not a Pi 5: nothing to say
+    if ma >= 5000:
+        return False
+    rc, out = run(["vcgencmd", "get_config", "usb_max_current_enable"], timeout=5)
+    return not (rc == 0 and out.strip().endswith("=1"))
+
+
 def read_ioerr(device):
     d = disk_sysfs(device)
     if not d:
@@ -240,6 +255,9 @@ class Storage:
         self._scrub_pos = 0
         self._ssd_device = None
         self.undervolt = False       # Pi power supply too weak (risk of corruption)
+        self.hot = False             # Pi slowed down by heat (since start-up)
+        self.temp_c = None
+        self.usb_limited = None      # Pi 5: USB held to 600 mA by a non-5 A supply
 
     @property
     def min_free(self):
@@ -291,7 +309,8 @@ class Storage:
                     unsafe += 1
         return {"ssd": self.ssd.snapshot(), "sd": self.sd.snapshot(),
                 "pending": pending + (1 if self.busy else 0), "damaged": unsafe,
-                "undervolt": self.undervolt}
+                "undervolt": self.undervolt, "hot": self.hot, "temp_c": self.temp_c,
+                "usb_limited": bool(self.usb_limited)}
 
     # --------------------------------------------------------- recording io
     MODES = {"both": ("ssd", "sd"), "ssd_first": ("ssd", "sd"), "sd_first": ("sd", "ssd"),
@@ -627,7 +646,14 @@ class Storage:
             d.errors["folder"] = str(e)
 
     def _check_power(self):
-        """Pi under-voltage (since boot) - a weak supply corrupts SD cards and SSDs."""
+        """Pi 5 power and heat: under-voltage (a weak supply corrupts drives), USB
+        limited to 600 mA (any supply other than the 27 W one: the SSD can drop
+        out), and slowing down because it's too hot."""
+        try:
+            with open("/sys/class/thermal/thermal_zone0/temp") as f:
+                self.temp_c = round(int(f.read()) / 1000)
+        except (OSError, ValueError):
+            self.temp_c = None
         if not shutil.which("vcgencmd"):
             return
         rc, out = run(["vcgencmd", "get_throttled"], timeout=5)
@@ -636,8 +662,18 @@ class Storage:
             bits = int(m.group(1), 16)
             uv = bool(bits & 0x10001)
             if uv and not self.undervolt:
-                log.error("UNDER-VOLTAGE: use a stronger power supply / powered USB hub (%s)", out)
+                log.error("UNDER-VOLTAGE: use the official 27 W supply (%s)", out)
             self.undervolt = uv
+            hot = bool(bits & 0x4000C)          # throttled / soft temperature limit
+            if hot and not self.hot:
+                log.error("the Pi got too hot and slowed down (%s, %s°C): fit the Active "
+                          "Cooler / let air into the enclosure", out, self.temp_c)
+            self.hot = hot
+        if self.usb_limited is None:            # the supply doesn't change while running
+            self.usb_limited = usb_current_limited()
+            if self.usb_limited:
+                log.error("power supply isn't the 27 W (5 A) one: the Pi limits all USB "
+                          "ports together to 600 mA, so the SSD can drop out")
 
     def _mount(self, part):
         dev, fs = part["name"], part.get("fstype")

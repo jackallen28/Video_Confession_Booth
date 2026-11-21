@@ -37,6 +37,22 @@ FADE = 0.5
 REVIEW_STATES = ("stopping", "review", "confirm")
 
 
+
+def set_cpu_governor(cfg):
+    """Pi 5: full processor speed while the booth runs (see cpu_governor)."""
+    gov = cfg.get("cpu_governor")
+    if not gov or not cfg.get("allow_shutdown"):         # not on a laptop
+        return
+    import glob as _glob
+    for p in _glob.glob("/sys/devices/system/cpu/cpufreq/policy*/scaling_governor"):
+        try:
+            with open(p, "w") as f:
+                f.write(gov)
+        except OSError as e:
+            log.info("CPU speed setting not changed (%s)", e)
+            return
+    log.info("CPU governor: %s", gov)
+
 class App:
     def __init__(self, cfg):
         self.cfg = cfg
@@ -119,6 +135,7 @@ class App:
 
     # ------------------------------------------------------------------ loop
     def run(self):
+        set_cpu_governor(self.cfg)
         self.storage.start()
         self.web.start()
         if self.cfg["fullscreen"]:
